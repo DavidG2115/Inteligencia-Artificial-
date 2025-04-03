@@ -5,8 +5,8 @@ import cv2 as cv
 rostro = cv.CascadeClassifier(cv.data.haarcascades + 'haarcascade_frontalface_alt.xml')
 
 # Iniciar la captura de video desde la cámara
-cap = cv.VideoCapture(0)  # Usar la cámara
-# cap = cv.VideoCapture("C:/Users/garcd/Downloads/Ana de armas.mp4")  # Cambiar para usar un archivo de video
+#cap = cv.VideoCapture(0)  # Usar la cámara
+cap = cv.VideoCapture("C:/Users/garcd/Downloads/Ana de armas.mp4")  # Cambiar para usar un archivo de video
 
 i = 0  # Contador para nombrar las imágenes guardadas
 
@@ -33,8 +33,8 @@ while True:
         cv.imshow('Rostro Recortado', rostro_recortado)
 
         # Guardar el rostro recortado cada 5 frames
-        # if i % 5 == 0:
-        #     cv.imwrite(f'C:/Users/garcd/OneDrive/Desktop/IA/opencv/recortes/Ana/{i}.jpg', rostro_recortado)
+        if i % 5 == 0:
+            cv.imwrite(f'C:/Users/garcd/OneDrive/Desktop/IA/codigo_clase/opencv/recortes/ana/{i}.jpg', rostro_recortado)
 
     # Mostrar el frame completo con los rostros detectados
     cv.imshow('Video', frame)
