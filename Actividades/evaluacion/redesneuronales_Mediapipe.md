@@ -1,10 +1,10 @@
 
 
-#Evaluacion Redes Neuronales Mediapipe
+# Evaluacion Redes Neuronales Mediapipe
 
 Nombre: David Garcia Aburto Calificacion
 
-##Modelar una red neuronal que pueda identificar emociones a travez de los valores obtenidos de los landmarks que genera mediapipe.
+## Modelar una red neuronal que pueda identificar emociones a travez de los valores obtenidos de los landmarks que genera mediapipe.
 
 - Definir el tipo de red neuronal y describir cada una de sus partes
 
