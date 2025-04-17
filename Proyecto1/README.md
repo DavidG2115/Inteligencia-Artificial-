@@ -18,4 +18,4 @@
 | 🔵 Azul | Parte del **camino óptimo** |
 | ⬜ Blanco | Espacio libre no explorado |
 
-![Vista del algoritmo](https://imgur.com/a/t47Ek7h)
+![Vista del algoritmo](AlgoritmoA.png)
