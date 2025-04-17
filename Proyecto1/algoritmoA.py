@@ -2,23 +2,25 @@ import pygame
 from queue import PriorityQueue
 
 # Configuraciones iniciales
-ANCHO_VENTANA = 800
+ANCHO_VENTANA = 750
 VENTANA = pygame.display.set_mode((ANCHO_VENTANA, ANCHO_VENTANA))
-pygame.display.set_caption("Visualización de Nodos")
+pygame.display.set_caption("Algoritmo A* ")
 
 # Pesos 
 PESO = 1
-PESO_DIAGONAL = 2
+PESO_DIAGONAL = 1.414
+
+HEURISTICA_PESO = 1.5  
 
 # Colores (RGB)
 BLANCO = (255, 255, 255)
 NEGRO = (0, 0, 0)
 GRIS = (128, 128, 128)
-VERDE = (0, 255, 0)
-ROJO = (255, 0, 0)
+VERDE = (0, 200, 0)
+ROJO = (200, 0, 0)
 NARANJA = (255, 165, 0)
 PURPURA = (128, 0, 128)
-AZUL = (0, 0, 160)
+AZUL = (0, 0, 200)
 
 class Nodo:
     def __init__(self, fila, col, ancho, total_filas):
@@ -75,6 +77,10 @@ class Nodo:
             ( 1,  0, PESO),  # abajo
             ( 0, -1, PESO),  # izquierda
             ( 0,  1, PESO),  # derecha
+            (-1, -1, PESO_DIAGONAL),  # arriba izquierda
+            (-1,  1, PESO_DIAGONAL),  # arriba derecha
+            ( 1, -1, PESO_DIAGONAL),  # abajo izquierda
+            ( 1,  1, PESO_DIAGONAL),  # abajo derecha
         ]
 
         for dx, dy, peso in direcciones:
@@ -146,7 +152,7 @@ def a_estrella(dibujar, grid, inicio, fin):
     g_score[inicio] = 0
 
     f_score = {n: float("inf") for fila in grid for n in fila}
-    f_score[inicio] = heuristica(inicio, fin)
+    f_score[inicio] = HEURISTICA_PESO * heuristica(inicio, fin)
 
     open_hash = {inicio}
 
@@ -170,7 +176,7 @@ def a_estrella(dibujar, grid, inicio, fin):
             if temp_g < g_score[vecino]:
                 came_from[vecino] = actual
                 g_score[vecino] = temp_g
-                f_score[vecino] = temp_g + heuristica(vecino, fin)
+                f_score[vecino] = temp_g + HEURISTICA_PESO * heuristica(vecino, fin)
                 if vecino not in open_hash:
                     count += 1
                     open_set.put((f_score[vecino], count, vecino))
@@ -187,7 +193,7 @@ def a_estrella(dibujar, grid, inicio, fin):
 
 
 def main(ventana, ancho):
-    FILAS = 10
+    FILAS = 20
     grid = crear_grid(FILAS, ancho)
 
     inicio = None
@@ -242,3 +248,4 @@ def main(ventana, ancho):
     pygame.quit()
 
 main(VENTANA, ANCHO_VENTANA)
+ 
