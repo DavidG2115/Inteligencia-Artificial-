@@ -6,6 +6,10 @@ ANCHO_VENTANA = 800
 VENTANA = pygame.display.set_mode((ANCHO_VENTANA, ANCHO_VENTANA))
 pygame.display.set_caption("Visualización de Nodos")
 
+# Pesos 
+PESO = 1
+PESO_DIAGONAL = 2
+
 # Colores (RGB)
 BLANCO = (255, 255, 255)
 NEGRO = (0, 0, 0)
@@ -64,18 +68,24 @@ class Nodo:
         
     def actualizar_vecinos(self, grid):
         self.vecinos = []
-        # abajo
-        if self.fila < self.total_filas - 1 and not grid[self.fila + 1][self.col].es_pared():
-            self.vecinos.append(grid[self.fila + 1][self.col])
-        # arriba
-        if self.fila > 0 and not grid[self.fila - 1][self.col].es_pared():
-            self.vecinos.append(grid[self.fila - 1][self.col])
-        # derecha
-        if self.col < self.total_filas - 1 and not grid[self.fila][self.col + 1].es_pared():
-            self.vecinos.append(grid[self.fila][self.col + 1])
-        # izquierda
-        if self.col > 0 and not grid[self.fila][self.col - 1].es_pared():
-            self.vecinos.append(grid[self.fila][self.col - 1])
+        filas = self.total_filas
+
+        direcciones = [
+            (-1,  0, PESO),  # arriba
+            ( 1,  0, PESO),  # abajo
+            ( 0, -1, PESO),  # izquierda
+            ( 0,  1, PESO),  # derecha
+        ]
+
+        for dx, dy, peso in direcciones:
+            nueva_fila = self.fila + dx
+            nueva_col = self.col + dy
+
+            if 0 <= nueva_fila < filas and 0 <= nueva_col < filas:
+                vecino = grid[nueva_fila][nueva_col]
+                if not vecino.es_pared():
+                    self.vecinos.append((vecino, peso))  # Guardamos nodo y peso
+
 
     def dibujar(self, ventana):
         pygame.draw.rect(ventana, self.color, (self.x, self.y, self.ancho, self.ancho))
@@ -154,8 +164,8 @@ def a_estrella(dibujar, grid, inicio, fin):
             inicio.hacer_inicio()
             return True
 
-        for vecino in actual.vecinos:
-            temp_g = g_score[actual] + 1
+        for vecino, peso in actual.vecinos:
+            temp_g = g_score[actual] + peso
 
             if temp_g < g_score[vecino]:
                 came_from[vecino] = actual
@@ -224,7 +234,7 @@ def main(ventana, ancho):
 
                     a_estrella(lambda: dibujar(ventana, grid, FILAS, ancho), grid, inicio, fin)
 
-                if event.key == pygame.K_c:
+                if event.key == pygame.K_r and inicio and fin:
                     inicio = None
                     fin = None
                     grid = crear_grid(FILAS, ancho)
