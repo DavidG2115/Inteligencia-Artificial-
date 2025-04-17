@@ -1,4 +1,5 @@
 import pygame
+from queue import PriorityQueue
 
 # Configuraciones iniciales
 ANCHO_VENTANA = 800
@@ -13,6 +14,7 @@ VERDE = (0, 255, 0)
 ROJO = (255, 0, 0)
 NARANJA = (255, 165, 0)
 PURPURA = (128, 0, 128)
+AZUL = (0, 0, 160)
 
 class Nodo:
     def __init__(self, fila, col, ancho, total_filas):
@@ -23,6 +25,7 @@ class Nodo:
         self.color = BLANCO
         self.ancho = ancho
         self.total_filas = total_filas
+        self.vecinos = []
 
     def get_pos(self):
         return self.fila, self.col
@@ -47,10 +50,36 @@ class Nodo:
 
     def hacer_fin(self):
         self.color = PURPURA
+        
+    # Metodos para cambiar el color de los nodos
+    def hacer_abierto(self):
+        self.color = VERDE
+        
+    def hacer_cerrado(self):
+        self.color = ROJO
+    
+    def hacer_camino(self):
+        self.color = AZUL
+
+        
+    def actualizar_vecinos(self, grid):
+        self.vecinos = []
+        # abajo
+        if self.fila < self.total_filas - 1 and not grid[self.fila + 1][self.col].es_pared():
+            self.vecinos.append(grid[self.fila + 1][self.col])
+        # arriba
+        if self.fila > 0 and not grid[self.fila - 1][self.col].es_pared():
+            self.vecinos.append(grid[self.fila - 1][self.col])
+        # derecha
+        if self.col < self.total_filas - 1 and not grid[self.fila][self.col + 1].es_pared():
+            self.vecinos.append(grid[self.fila][self.col + 1])
+        # izquierda
+        if self.col > 0 and not grid[self.fila][self.col - 1].es_pared():
+            self.vecinos.append(grid[self.fila][self.col - 1])
 
     def dibujar(self, ventana):
         pygame.draw.rect(ventana, self.color, (self.x, self.y, self.ancho, self.ancho))
-
+        
 def crear_grid(filas, ancho):
     grid = []
     ancho_nodo = ancho // filas
@@ -83,6 +112,69 @@ def obtener_click_pos(pos, filas, ancho):
     fila = y // ancho_nodo
     col = x // ancho_nodo
     return fila, col
+
+# Logica para el Algoritmo A* 
+def heuristica(a, b):
+    x1, y1 = a.get_pos()
+    x2, y2 = b.get_pos()
+    return abs(x1 - x2) + abs(y1 - y2)
+
+def reconstruir_camino(came_from, actual, dibujar):
+    while actual in came_from:
+        actual = came_from[actual]
+        if not actual.es_inicio():
+            actual.hacer_camino()
+        dibujar()
+
+def a_estrella(dibujar, grid, inicio, fin):
+    count = 0
+    open_set = PriorityQueue()
+    open_set.put((0, count, inicio))
+    came_from = {}
+
+    g_score = {n: float("inf") for fila in grid for n in fila}
+    g_score[inicio] = 0
+
+    f_score = {n: float("inf") for fila in grid for n in fila}
+    f_score[inicio] = heuristica(inicio, fin)
+
+    open_hash = {inicio}
+
+    while not open_set.empty():
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+
+        actual = open_set.get()[2]
+        open_hash.remove(actual)
+
+        if actual == fin:
+            reconstruir_camino(came_from, fin, dibujar)
+            fin.hacer_fin()
+            inicio.hacer_inicio()
+            return True
+
+        for vecino in actual.vecinos:
+            temp_g = g_score[actual] + 1
+
+            if temp_g < g_score[vecino]:
+                came_from[vecino] = actual
+                g_score[vecino] = temp_g
+                f_score[vecino] = temp_g + heuristica(vecino, fin)
+                if vecino not in open_hash:
+                    count += 1
+                    open_set.put((f_score[vecino], count, vecino))
+                    open_hash.add(vecino)
+                    vecino.hacer_abierto()
+
+        dibujar()
+        pygame.time.delay(50)
+
+        if actual != inicio:
+            actual.hacer_cerrado()
+
+    return False
+
 
 def main(ventana, ancho):
     FILAS = 10
@@ -123,6 +215,19 @@ def main(ventana, ancho):
                     inicio = None
                 elif nodo == fin:
                     fin = None
+                    
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE and inicio and fin:
+                    for fila in grid:
+                        for nodo in fila:
+                            nodo.actualizar_vecinos(grid)
+
+                    a_estrella(lambda: dibujar(ventana, grid, FILAS, ancho), grid, inicio, fin)
+
+                if event.key == pygame.K_c:
+                    inicio = None
+                    fin = None
+                    grid = crear_grid(FILAS, ancho)
 
     pygame.quit()
 
