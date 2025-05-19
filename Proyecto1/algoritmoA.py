@@ -9,8 +9,7 @@ pygame.display.set_caption("Algoritmo A* ")
 # Pesos 
 PESO = 1
 PESO_DIAGONAL = 1.414
-
-HEURISTICA_PESO = 1.5  
+ 
 
 # Colores (RGB)
 BLANCO = (255, 255, 255)
@@ -152,9 +151,13 @@ def a_estrella(dibujar, grid, inicio, fin):
     g_score[inicio] = 0
 
     f_score = {n: float("inf") for fila in grid for n in fila}
-    f_score[inicio] = HEURISTICA_PESO * heuristica(inicio, fin)
+    f_score[inicio] = heuristica(inicio, fin)
+
+    h_score = {n: float("inf") for fila in grid for n in fila}
+    h_score[inicio] = heuristica(inicio, fin)
 
     open_hash = {inicio}
+    cerrados = set()
 
     while not open_set.empty():
         for event in pygame.event.get():
@@ -168,6 +171,10 @@ def a_estrella(dibujar, grid, inicio, fin):
             reconstruir_camino(came_from, fin, dibujar)
             fin.hacer_fin()
             inicio.hacer_inicio()
+            print("\nLista de nodos cerrados:")
+            for nodo in cerrados:
+                fila, col = nodo.get_pos()
+                print(f"({fila}, {col})")
             return True
 
         for vecino, peso in actual.vecinos:
@@ -176,7 +183,12 @@ def a_estrella(dibujar, grid, inicio, fin):
             if temp_g < g_score[vecino]:
                 came_from[vecino] = actual
                 g_score[vecino] = temp_g
-                f_score[vecino] = temp_g + HEURISTICA_PESO * heuristica(vecino, fin)
+                h_score[vecino] = heuristica(vecino, fin)
+                f_score[vecino] = temp_g + h_score[vecino]
+
+                fila, col = vecino.get_pos()
+                print(f"Nodo ({fila}, {col}) -> g: {g_score[vecino]:.2f}, h: {h_score[vecino]:.2f}, f: {f_score[vecino]:.2f}")
+
                 if vecino not in open_hash:
                     count += 1
                     open_set.put((f_score[vecino], count, vecino))
@@ -188,8 +200,17 @@ def a_estrella(dibujar, grid, inicio, fin):
 
         if actual != inicio:
             actual.hacer_cerrado()
+            cerrados.add(actual)
+
+    print("\nNo se encontró camino.")
+    print("Lista de nodos cerrados:")
+    for nodo in cerrados:
+        fila, col = nodo.get_pos()
+        print(f"({fila}, {col})")
 
     return False
+
+
 
 
 def main(ventana, ancho):
