@@ -5,12 +5,13 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import train_test_split
 import pandas as pd
 import joblib
+import os
 
 # Inicializar Pygame
 pygame.init()
 
 # Dimensiones de la pantalla
-w, h = 800, 400
+w, h = 1000, 600
 pantalla = pygame.display.set_mode((w, h))
 pygame.display.set_caption("Juego: Disparo de Bala, Salto, Nave y Menú")
 
@@ -75,6 +76,61 @@ bala_disparada = False
 fondo_x1 = 0
 fondo_x2 = w
 
+# Función para guardar datos de entrenamiento
+def guardar_datos():
+    global jugador, bala, velocidad_bala, salto
+    if modo_auto:  # Solo guardamos en modo manual
+        return
+    distancia = abs(jugador.x - bala.x)
+    salto_hecho = 1 if salto else 0
+    datos_modelo.append((velocidad_bala, distancia, salto_hecho))
+
+        
+# Función para crear/entrenar el modelo
+def crear_entrenar_modelo():
+    try:
+        df = pd.read_csv('datos_entrenamiento.csv')
+    except:
+        datos = {
+            'velocidad': [-5, -3, -7, -4],
+            'distancia': [200, 150, 300, 100],
+            'salto': [1, 0, 1, 0]
+        }
+        df = pd.DataFrame(datos)
+        df.to_csv('datos_entrenamiento.csv', index=False)
+
+    X = df[['velocidad', 'distancia']]
+    y = df['salto']
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+    modelo = MLPClassifier(hidden_layer_sizes=(10,), max_iter=1000)
+    modelo.fit(X_train, y_train)
+
+    acc = modelo.score(X_test, y_test)
+    print(f"Modelo entrenado con precisión: {acc * 100:.2f}%")
+
+    joblib.dump(modelo, 'modelo_saltos.joblib')
+    return modelo
+
+# Cargar modelo al inicio
+try:
+    modelo = joblib.load('modelo_saltos.joblib')
+except:
+    modelo = crear_entrenar_modelo()
+    
+    
+def borrar_entrenamiento():
+    if os.path.exists("datos_entrenamiento.csv"):
+        os.remove("datos_entrenamiento.csv")
+        print("Archivo de datos eliminado.")
+    if os.path.exists("modelo_saltos.joblib"):
+        os.remove("modelo_saltos.joblib")
+        print("Modelo entrenado eliminado.")
+    
+    # Reentrenar con datos por defecto para evitar errores
+    global modelo
+    modelo = crear_entrenar_modelo()
+
 # Función para disparar la bala
 def disparar_bala():
     global bala_disparada, velocidad_bala
@@ -102,6 +158,15 @@ def manejar_salto():
             salto = False
             salto_altura = 15  # Restablecer la velocidad de salto
             en_suelo = True
+
+def actualizar_ia():
+    distancia = abs(jugador.x - bala.x)
+    entrada = pd.DataFrame([[velocidad_bala, distancia]], columns=["velocidad", "distancia"])
+    prediccion = modelo.predict(entrada)[0]
+    print(f"[IA] Velocidad: {velocidad_bala} | Distancia: {distancia} → Predicción: {prediccion}")
+    if prediccion == 1 and en_suelo:
+        return True
+    return False
 
 # Función para actualizar el juego
 def update():
@@ -160,19 +225,61 @@ def guardar_datos():
 
 # Función para pausar el juego y guardar los datos
 def pausa_juego():
-    global pausa
-    pausa = not pausa
-    if pausa:
-        print("Juego pausado. Datos registrados hasta ahora:", datos_modelo)
-    else:
-        print("Juego reanudado.")
+    global pausa, modo_auto, modelo
+
+    pausa = True
+    pantalla.fill(NEGRO)
+
+    opciones = [
+        "C: Continuar",
+        "A: Cambiar a modo Automático",
+        "M: Cambiar a modo Manual",
+        "T: Reentrenar Modelo",
+        "R: Reiniciar entrenamiento",
+        "Q: Salir del juego"
+    ]
+
+    for i, texto in enumerate(opciones):
+        linea = fuente.render(texto, True, BLANCO)
+        pantalla.blit(linea, (w // 4, h // 3 + i * 30))
+
+    pygame.display.flip()
+
+    esperando = True
+    while esperando:
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+            if evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_c:
+                    pausa = False
+                    esperando = False
+                elif evento.key == pygame.K_a:
+                    modo_auto = True
+                    print("Cambiado a modo automático.")
+                elif evento.key == pygame.K_m:
+                    modo_auto = False
+                    print("Cambiado a modo manual.")
+                elif evento.key == pygame.K_t:
+                    modelo = crear_entrenar_modelo()
+                    print("Modelo reentrenado.")
+                elif evento.key == pygame.K_r:
+                    borrar_entrenamiento()
+                    print("Entrenamiento reiniciado.")
+                elif evento.key == pygame.K_q:
+                    print("Juego terminado.")
+                    pygame.quit()
+                    exit()
+
 
 # Función para mostrar el menú y seleccionar el modo de juego
 def mostrar_menu():
-    global menu_activo, modo_auto
+    global menu_activo, modo_auto, modelo
+
     pantalla.fill(NEGRO)
-    texto = fuente.render("Presiona 'A' para Auto, 'M' para Manual, o 'Q' para Salir", True, BLANCO)
-    pantalla.blit(texto, (w // 4, h // 2))
+    texto = fuente.render("Presiona 'A' para Auto, 'M' para Manual, 'T' para Entrenar, 'R' para Reset, o 'Q' para Salir", True, BLANCO)
+    pantalla.blit(texto, (w // 8, h // 2))
     pygame.display.flip()
 
     while menu_activo:
@@ -187,14 +294,31 @@ def mostrar_menu():
                 elif evento.key == pygame.K_m:
                     modo_auto = False
                     menu_activo = False
+                elif evento.key == pygame.K_t:
+                    modelo = crear_entrenar_modelo()
+                    print("Modelo reentrenado manualmente.")
+                elif evento.key == pygame.K_r:
+                    borrar_entrenamiento()
+                    print("Entrenamiento y datos reiniciados.")
                 elif evento.key == pygame.K_q:
                     print("Juego terminado. Datos recopilados:", datos_modelo)
                     pygame.quit()
                     exit()
 
+
 # Función para reiniciar el juego tras la colisión
 def reiniciar_juego():
-    global menu_activo, jugador, bala, nave, bala_disparada, salto, en_suelo
+    global menu_activo, jugador, bala, nave, bala_disparada, salto, en_suelo, modelo
+    
+    # Si fue modo manual, guardar y entrenar con nuevos datos
+    if not modo_auto and datos_modelo:
+        print("Guardando datos...")
+        with open('datos_entrenamiento.csv', 'a') as f:
+            for v, d, s in datos_modelo:
+                f.write(f"{v},{d},{s}\n")
+        modelo = crear_entrenar_modelo()
+        datos_modelo.clear()
+    
     menu_activo = True  # Activar de nuevo el menú
     jugador.x, jugador.y = 50, h - 100  # Reiniciar posición del jugador
     bala.x = w - 50  # Reiniciar posición de la bala
@@ -202,9 +326,8 @@ def reiniciar_juego():
     bala_disparada = False
     salto = False
     en_suelo = True
-    # Mostrar los datos recopilados hasta el momento
-    print("Datos recopilados para el modelo: ", datos_modelo)
-    mostrar_menu()  # Mostrar el menú de nuevo para seleccionar modo
+    mostrar_menu() 
+    
 
 def main():
     global salto, en_suelo, bala_disparada
@@ -229,21 +352,26 @@ def main():
                     exit()
 
         if not pausa:
-            # Modo manual: el jugador controla el salto
+    # Ejecutar salto si está activo, en cualquier modo
+            if salto:
+                manejar_salto()
+
+            # Solo guardar datos si es modo manual
             if not modo_auto:
-                if salto:
-                    manejar_salto()
-                # Guardar los datos si estamos en modo manual
                 guardar_datos()
 
-            # Actualizar el juego
             if not bala_disparada:
                 disparar_bala()
             update()
 
+            if modo_auto and actualizar_ia():
+                salto = True
+                en_suelo = False
+
+
         # Actualizar la pantalla
         pygame.display.flip()
-        reloj.tick(30)  # Limitar el juego a 30 FPS
+        reloj.tick(60)  # Limitar el juego a 30 FPS
 
     pygame.quit()
 
