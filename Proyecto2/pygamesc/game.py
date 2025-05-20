@@ -3,12 +3,17 @@ import random
 import numpy as np
 from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
 import pandas as pd
 import joblib
 import os
 
 # Inicializar Pygame
 pygame.init()
+
+# nn = "red neuronal"  dt = "arbol de decision"
+# Definir el tipo de modelo a usar
+modelo_tipo = "nn"
 
 # Dimensiones de la pantalla
 w, h = 1000, 600
@@ -107,7 +112,7 @@ def crear_entrenar_modelo():
     modelo.fit(X_train, y_train)
 
     acc = modelo.score(X_test, y_test)
-    print(f"Modelo entrenado con precisión: {acc * 100:.2f}%")
+    print(f"Modelo de red neuronal entrenado con precisión: {acc * 100:.2f}%")
 
     joblib.dump(modelo, 'modelo_saltos.joblib')
     return modelo
@@ -117,6 +122,39 @@ try:
     modelo = joblib.load('modelo_saltos.joblib')
 except:
     modelo = crear_entrenar_modelo()
+    
+def crear_arbol_decision():
+    try:
+        df = pd.read_csv('datos_entrenamiento.csv')
+        if df.empty or len(df) < 4:
+            raise ValueError("Archivo vacío o con pocos datos.")
+    except:
+        print("Creando datos de entrenamiento de ejemplo...")
+        datos = {
+            'velocidad': [-5, -3, -7, -4],
+            'distancia': [200, 150, 300, 100],
+            'salto': [1, 0, 1, 0]
+        }
+        df = pd.DataFrame(datos)
+        df.to_csv('datos_entrenamiento.csv', index=False)
+
+    X = df[['velocidad', 'distancia']]
+    y = df['salto']
+
+    modelo = DecisionTreeClassifier()
+    modelo.fit(X, y)
+
+    acc = modelo.score(X, y)  # árboles no generalizan tanto, precisión sobre el mismo dataset
+    print(f"Árbol de decisión entrenado con precisión: {acc * 100:.2f}%")
+
+    joblib.dump(modelo, 'modelo_arbol.joblib')
+    return modelo
+
+# Cargar modelo de árbol de decisión al inicio
+try:
+    modelo_arbol = joblib.load('modelo_arbol.joblib')
+except:
+    modelo_arbol = crear_arbol_decision()  
     
     
 def borrar_entrenamiento():
@@ -162,11 +200,20 @@ def manejar_salto():
 def actualizar_ia():
     distancia = abs(jugador.x - bala.x)
     entrada = pd.DataFrame([[velocidad_bala, distancia]], columns=["velocidad", "distancia"])
-    prediccion = modelo.predict(entrada)[0]
-    print(f"[IA] Velocidad: {velocidad_bala} | Distancia: {distancia} → Predicción: {prediccion}")
+
+    if modelo_tipo == "nn":
+        probabilidad_salto = modelo.predict_proba(entrada)[0][1]
+        prediccion = 1 if probabilidad_salto > 0.55 else 0
+        print(f"[IA-NN] Velocidad: {velocidad_bala} | Distancia: {distancia} → Probabilidad salto: {probabilidad_salto:.2f}")
+        
+    elif modelo_tipo == "dt":
+        prediccion = modelo_arbol.predict(entrada)[0]
+        print(f"[IA-DT] Velocidad: {velocidad_bala} | Distancia: {distancia} → Predicción: {prediccion}")
+        
     if prediccion == 1 and en_suelo:
         return True
     return False
+
 
 # Función para actualizar el juego
 def update():
@@ -225,23 +272,30 @@ def guardar_datos():
 
 # Función para pausar el juego y guardar los datos
 def pausa_juego():
-    global pausa, modo_auto, modelo
+    global pausa, modo_auto, modelo, modelo_tipo, modelo_arbol
 
     pausa = True
     pantalla.fill(NEGRO)
+
+    # Mostrar estado actual del modo y modelo
+    estado_texto = f"Modo: {'Automático' if modo_auto else 'Manual'} | Modelo: {'Red Neuronal' if modelo_tipo == 'nn' else 'Árbol de Decisión'}"
+    estado_render = fuente.render(estado_texto, True, BLANCO)
+    pantalla.blit(estado_render, (w // 6, h // 3 - 40))
 
     opciones = [
         "C: Continuar",
         "A: Cambiar a modo Automático",
         "M: Cambiar a modo Manual",
-        "T: Reentrenar Modelo",
+        "1: Usar Red Neuronal",
+        "2: Usar Árbol de Decisión",
+        "T: Reentrenar Modelos",
         "R: Reiniciar entrenamiento",
         "Q: Salir del juego"
     ]
 
     for i, texto in enumerate(opciones):
         linea = fuente.render(texto, True, BLANCO)
-        pantalla.blit(linea, (w // 4, h // 3 + i * 30))
+        pantalla.blit(linea, (w // 6, h // 3 + i * 30))
 
     pygame.display.flip()
 
@@ -251,22 +305,31 @@ def pausa_juego():
             if evento.type == pygame.QUIT:
                 pygame.quit()
                 exit()
-            if evento.type == pygame.KEYDOWN:
+            elif evento.type == pygame.KEYDOWN:
                 if evento.key == pygame.K_c:
                     pausa = False
                     esperando = False
                 elif evento.key == pygame.K_a:
                     modo_auto = True
-                    print("Cambiado a modo automático.")
+                    print("Modo cambiado a Automático.")
                 elif evento.key == pygame.K_m:
                     modo_auto = False
-                    print("Cambiado a modo manual.")
+                    print("Modo cambiado a Manual.")
+                elif evento.key == pygame.K_1:
+                    modelo_tipo = "nn"
+                    print("Modelo cambiado a Red Neuronal.")
+                elif evento.key == pygame.K_2:
+                    modelo_tipo = "dt"
+                    print("Modelo cambiado a Árbol de Decisión.")
                 elif evento.key == pygame.K_t:
                     modelo = crear_entrenar_modelo()
-                    print("Modelo reentrenado.")
+                    modelo_arbol = crear_arbol_decision()
+                    print("Modelos reentrenados.")
                 elif evento.key == pygame.K_r:
                     borrar_entrenamiento()
-                    print("Entrenamiento reiniciado.")
+                    modelo = crear_entrenar_modelo()
+                    modelo_arbol = crear_arbol_decision()
+                    print("Entrenamiento y modelos reiniciados.")
                 elif evento.key == pygame.K_q:
                     print("Juego terminado.")
                     pygame.quit()
@@ -275,11 +338,25 @@ def pausa_juego():
 
 # Función para mostrar el menú y seleccionar el modo de juego
 def mostrar_menu():
-    global menu_activo, modo_auto, modelo
+    global menu_activo, modo_auto, modelo, modelo_tipo, modelo_arbol
 
     pantalla.fill(NEGRO)
-    texto = fuente.render("Presiona 'A' para Auto, 'M' para Manual, 'T' para Entrenar, 'R' para Reset, o 'Q' para Salir", True, BLANCO)
-    pantalla.blit(texto, (w // 8, h // 2))
+    texto = fuente.render("MENÚ PRINCIPAL", True, BLANCO)
+    pantalla.blit(texto, (w // 3, h // 3 - 40))
+
+    opciones = [
+        "A: Jugar con Red Neuronal (Automático)",
+        "D: Jugar con Árbol de Decisión (Automático)",
+        "M: Jugar en Modo Manual",
+        "T: Reentrenar Modelos",
+        "R: Reiniciar entrenamiento",
+        "Q: Salir del juego"
+    ]
+
+    for i, linea in enumerate(opciones):
+        render = fuente.render(linea, True, BLANCO)
+        pantalla.blit(render, (w // 6, h // 3 + i * 30))
+
     pygame.display.flip()
 
     while menu_activo:
@@ -290,20 +367,28 @@ def mostrar_menu():
             if evento.type == pygame.KEYDOWN:
                 if evento.key == pygame.K_a:
                     modo_auto = True
+                    modelo_tipo = "nn"
+                    menu_activo = False
+                elif evento.key == pygame.K_d:
+                    modo_auto = True
+                    modelo_tipo = "dt"
                     menu_activo = False
                 elif evento.key == pygame.K_m:
                     modo_auto = False
                     menu_activo = False
                 elif evento.key == pygame.K_t:
                     modelo = crear_entrenar_modelo()
-                    print("Modelo reentrenado manualmente.")
+                    modelo_arbol = crear_arbol_decision()
+                    print("Modelos reentrenados.")
                 elif evento.key == pygame.K_r:
                     borrar_entrenamiento()
-                    print("Entrenamiento y datos reiniciados.")
+                    modelo = crear_entrenar_modelo()
+                    modelo_arbol = crear_arbol_decision()
+                    print("Entrenamiento reiniciado.")
                 elif evento.key == pygame.K_q:
-                    print("Juego terminado. Datos recopilados:", datos_modelo)
                     pygame.quit()
                     exit()
+
 
 
 # Función para reiniciar el juego tras la colisión
@@ -347,7 +432,6 @@ def main():
                 if evento.key == pygame.K_p:  # Presiona 'p' para pausar el juego
                     pausa_juego()
                 if evento.key == pygame.K_q:  # Presiona 'q' para terminar el juego
-                    print("Juego terminado. Datos recopilados:", datos_modelo)
                     pygame.quit()
                     exit()
 
