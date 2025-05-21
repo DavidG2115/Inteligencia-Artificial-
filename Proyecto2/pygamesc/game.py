@@ -4,16 +4,20 @@ import numpy as np
 from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
 import pandas as pd
 import joblib
 import os
 
 # Inicializar Pygame
 pygame.init()
-
-# nn = "red neuronal"  dt = "arbol de decision"
-# Definir el tipo de modelo a usar
+ 
+# Definir el tipo de modelo a usar nn = "red neuronal"  dt = "arbol de decision" knn = "k-vecinos"
 modelo_tipo = "nn"
+modelo = None  # Modelo de red neuronal
+modelo_knn = None  # Modelo de k-vecinos
+modelo_arbol = None  # Modelo de árbol de decisión
+
 
 # Dimensiones de la pantalla
 w, h = 1000, 600
@@ -156,6 +160,37 @@ try:
 except:
     modelo_arbol = crear_arbol_decision()  
     
+def crear_modelo_knn():
+    try:
+        df = pd.read_csv('datos_entrenamiento.csv')
+        if df.empty or len(df) < 4:
+            raise ValueError("Datos insuficientes")
+    except:
+        datos = {
+            'velocidad': [-5, -3, -7, -4],
+            'distancia': [200, 150, 300, 100],
+            'salto': [1, 0, 1, 0]
+        }
+        df = pd.DataFrame(datos)
+        df.to_csv('datos_entrenamiento.csv', index=False)
+
+    X = df[['velocidad', 'distancia']]
+    y = df['salto']
+
+    modelo = KNeighborsClassifier(n_neighbors=3)
+    modelo.fit(X, y)
+
+    acc = modelo.score(X, y)
+    print(f"K-Vecinos entrenado con precisión: {acc * 100:.2f}%")
+
+    joblib.dump(modelo, 'modelo_knn.joblib')
+    return modelo
+
+try:
+    modelo_knn = joblib.load('modelo_knn.joblib')
+except:
+    modelo_knn = crear_modelo_knn()
+
     
 def borrar_entrenamiento():
     if os.path.exists("datos_entrenamiento.csv"):
@@ -164,10 +199,17 @@ def borrar_entrenamiento():
     if os.path.exists("modelo_saltos.joblib"):
         os.remove("modelo_saltos.joblib")
         print("Modelo entrenado eliminado.")
-    
-    # Reentrenar con datos por defecto para evitar errores
-    global modelo
+    if os.path.exists("modelo_arbol.joblib"):
+        os.remove("modelo_arbol.joblib")
+        print("Modelo de árbol de decisión eliminado.")
+    if os.path.exists("modelo_knn.joblib"):
+        os.remove("modelo_knn.joblib")
+        print("Modelo de K-Vecinos eliminado.")
+    # Reiniciar el modelo a su estado inicial
+    global modelo, modelo_arbol, modelo_knn
     modelo = crear_entrenar_modelo()
+    modelo_arbol = crear_arbol_decision()
+    modelo_knn = crear_modelo_knn()
 
 # Función para disparar la bala
 def disparar_bala():
@@ -194,7 +236,7 @@ def manejar_salto():
         if jugador.y >= h - 100:
             jugador.y = h - 100
             salto = False
-            salto_altura = 15  # Restablecer la velocidad de salto
+            salto_altura = 18  # Restablecer la velocidad de salto
             en_suelo = True
 
 def actualizar_ia():
@@ -203,12 +245,19 @@ def actualizar_ia():
 
     if modelo_tipo == "nn":
         probabilidad_salto = modelo.predict_proba(entrada)[0][1]
-        prediccion = 1 if probabilidad_salto > 0.55 else 0
+        prediccion = 1 if probabilidad_salto > 0.80 else 0
         print(f"[IA-NN] Velocidad: {velocidad_bala} | Distancia: {distancia} → Probabilidad salto: {probabilidad_salto:.2f}")
         
     elif modelo_tipo == "dt":
-        prediccion = modelo_arbol.predict(entrada)[0]
-        print(f"[IA-DT] Velocidad: {velocidad_bala} | Distancia: {distancia} → Predicción: {prediccion}")
+        probabilidad_salto = modelo_arbol.predict_proba(entrada)[0][1]
+        prediccion = 1 if probabilidad_salto > 0.80 else 0
+        print(f"[IA-DT] Velocidad: {velocidad_bala} | Distancia: {distancia} → Probabilidad salto: {probabilidad_salto:.2f}")
+        
+    elif modelo_tipo == "knn":
+        probabilidad_salto = modelo_knn.predict_proba(entrada)[0][1]
+        prediccion = 1 if probabilidad_salto > 0.80 else 0
+        print(f"[IA-KNN] Velocidad: {velocidad_bala} | Distancia: {distancia} → Probabilidad salto: {probabilidad_salto:.2f}")
+
         
     if prediccion == 1 and en_suelo:
         return True
@@ -272,7 +321,7 @@ def guardar_datos():
 
 # Función para pausar el juego y guardar los datos
 def pausa_juego():
-    global pausa, modo_auto, modelo, modelo_tipo, modelo_arbol
+    global pausa, modo_auto, modelo, modelo_tipo, modelo_arbol, modelo_knn
 
     pausa = True
     pantalla.fill(NEGRO)
@@ -283,11 +332,12 @@ def pausa_juego():
     pantalla.blit(estado_render, (w // 6, h // 3 - 40))
 
     opciones = [
-        "C: Continuar",
+        "P: Continuar",
         "A: Cambiar a modo Automático",
         "M: Cambiar a modo Manual",
-        "1: Usar Red Neuronal",
-        "2: Usar Árbol de Decisión",
+        "N: Usar Red Neuronal",
+        "D: Usar Árbol de Decisión",
+        "K: Jugar con K-Vecinos",
         "T: Reentrenar Modelos",
         "R: Reiniciar entrenamiento",
         "Q: Salir del juego"
@@ -306,7 +356,7 @@ def pausa_juego():
                 pygame.quit()
                 exit()
             elif evento.type == pygame.KEYDOWN:
-                if evento.key == pygame.K_c:
+                if evento.key == pygame.K_p:
                     pausa = False
                     esperando = False
                 elif evento.key == pygame.K_a:
@@ -315,15 +365,19 @@ def pausa_juego():
                 elif evento.key == pygame.K_m:
                     modo_auto = False
                     print("Modo cambiado a Manual.")
-                elif evento.key == pygame.K_1:
+                elif evento.key == pygame.K_n:
                     modelo_tipo = "nn"
                     print("Modelo cambiado a Red Neuronal.")
-                elif evento.key == pygame.K_2:
+                elif evento.key == pygame.K_d:
                     modelo_tipo = "dt"
                     print("Modelo cambiado a Árbol de Decisión.")
+                elif evento.key == pygame.K_k:
+                    modelo_tipo = "knn"
+                    print("Modelo cambiado a K-Vecinos.")
                 elif evento.key == pygame.K_t:
                     modelo = crear_entrenar_modelo()
                     modelo_arbol = crear_arbol_decision()
+                    modelo_knn = crear_modelo_knn()
                     print("Modelos reentrenados.")
                 elif evento.key == pygame.K_r:
                     borrar_entrenamiento()
@@ -334,19 +388,23 @@ def pausa_juego():
                     print("Juego terminado.")
                     pygame.quit()
                     exit()
+                else:
+                    print("Tecla no válida. Presiona 'P' para continuar o 'Q' para salir.")
+    
 
 
 # Función para mostrar el menú y seleccionar el modo de juego
 def mostrar_menu():
-    global menu_activo, modo_auto, modelo, modelo_tipo, modelo_arbol
+    global menu_activo, modo_auto, modelo, modelo_tipo, modelo_arbol, modelo_knn
 
     pantalla.fill(NEGRO)
     texto = fuente.render("MENÚ PRINCIPAL", True, BLANCO)
     pantalla.blit(texto, (w // 3, h // 3 - 40))
 
     opciones = [
-        "A: Jugar con Red Neuronal (Automático)",
-        "D: Jugar con Árbol de Decisión (Automático)",
+        "N: Jugar con Red Neuronal (Automatico)",
+        "D: Jugar con Arbol de Decisión (Automatico)",
+        "K: Jugar con K-Vecinos (Automatico)",
         "M: Jugar en Modo Manual",
         "T: Reentrenar Modelos",
         "R: Reiniciar entrenamiento",
@@ -365,7 +423,7 @@ def mostrar_menu():
                 pygame.quit()
                 exit()
             if evento.type == pygame.KEYDOWN:
-                if evento.key == pygame.K_a:
+                if evento.key == pygame.K_n:
                     modo_auto = True
                     modelo_tipo = "nn"
                     menu_activo = False
@@ -376,9 +434,14 @@ def mostrar_menu():
                 elif evento.key == pygame.K_m:
                     modo_auto = False
                     menu_activo = False
+                elif evento.key == pygame.K_k:
+                    modo_auto = True
+                    modelo_tipo = "knn"
+                    menu_activo = False
                 elif evento.key == pygame.K_t:
                     modelo = crear_entrenar_modelo()
                     modelo_arbol = crear_arbol_decision()
+                    modelo_knn = crear_modelo_knn()
                     print("Modelos reentrenados.")
                 elif evento.key == pygame.K_r:
                     borrar_entrenamiento()

@@ -1,3 +1,4 @@
 datos_entrenamiento.csv
 modelo_saltos.joblib
 modelo_arbol.joblib
+modelo_knn.joblib
