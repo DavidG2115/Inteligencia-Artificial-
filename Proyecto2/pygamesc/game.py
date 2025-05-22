@@ -5,6 +5,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import export_text
 import pandas as pd
 import joblib
 import os
@@ -108,11 +109,23 @@ def crear_entrenar_modelo():
         df = pd.DataFrame(datos)
         df.to_csv('datos_entrenamiento.csv', index=False)
 
+    # Eliminar duplicados exactos
+    df = df.drop_duplicates()
+
+    # Eliminar filas con valores imposibles
+    df = df[(df['velocidad'] <= -1) & (df['velocidad'] >= -20)]  # por ejemplo
+    df = df[(df['distancia'] >= 0) & (df['distancia'] <= 1000)]  # lógica básica
+    df = df[df['salto'].isin([0, 1])]  # asegurarse que salto sea 0 o 1
+
+    # Eliminar filas faltantes o mal formadas
+    df = df.dropna()
+
+
     X = df[['velocidad', 'distancia']]
     y = df['salto']
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-    modelo = MLPClassifier(hidden_layer_sizes=(10,), max_iter=1000)
+    modelo = MLPClassifier(hidden_layer_sizes=(16, 8,), max_iter=5000)
     modelo.fit(X_train, y_train)
 
     acc = modelo.score(X_test, y_test)
@@ -147,6 +160,8 @@ def crear_arbol_decision():
 
     modelo = DecisionTreeClassifier()
     modelo.fit(X, y)
+    
+    print(export_text(modelo, feature_names=["velocidad", "distancia"]))
 
     acc = modelo.score(X, y)  # árboles no generalizan tanto, precisión sobre el mismo dataset
     print(f"Árbol de decisión entrenado con precisión: {acc * 100:.2f}%")
@@ -177,7 +192,10 @@ def crear_modelo_knn():
     X = df[['velocidad', 'distancia']]
     y = df['salto']
 
-    modelo = KNeighborsClassifier(n_neighbors=3)
+    n_max = len(X)
+    n_vecinos = 7 if n_max >= 7 else n_max
+
+    modelo = KNeighborsClassifier(n_neighbors=n_vecinos, weights='distance')
     modelo.fit(X, y)
 
     acc = modelo.score(X, y)
@@ -311,13 +329,6 @@ def update():
         print("Colisión detectada!")
         reiniciar_juego()  # Terminar el juego y mostrar el menú
 
-# Función para guardar datos del modelo en modo manual
-def guardar_datos():
-    global jugador, bala, velocidad_bala, salto
-    distancia = abs(jugador.x - bala.x)
-    salto_hecho = 1 if salto else 0  # 1 si saltó, 0 si no saltó
-    # Guardar velocidad de la bala, distancia al jugador y si saltó o no
-    datos_modelo.append((velocidad_bala, distancia, salto_hecho))
 
 # Función para pausar el juego y guardar los datos
 def pausa_juego():
@@ -456,7 +467,7 @@ def mostrar_menu():
 
 # Función para reiniciar el juego tras la colisión
 def reiniciar_juego():
-    global menu_activo, jugador, bala, nave, bala_disparada, salto, en_suelo, modelo
+    global menu_activo, jugador, bala, nave, bala_disparada, salto, en_suelo, modelo, modelo_arbol, modelo_knn, datos_modelo
     
     # Si fue modo manual, guardar y entrenar con nuevos datos
     if not modo_auto and datos_modelo:
@@ -465,6 +476,8 @@ def reiniciar_juego():
             for v, d, s in datos_modelo:
                 f.write(f"{v},{d},{s}\n")
         modelo = crear_entrenar_modelo()
+        modelo_arbol = crear_arbol_decision()
+        modelo_knn = crear_modelo_knn()
         datos_modelo.clear()
     
     menu_activo = True  # Activar de nuevo el menú
