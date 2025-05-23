@@ -68,10 +68,10 @@ menu_img = pygame.image.load('assets/game/menu.png')
 fondo_img = pygame.transform.scale(fondo_img, (w, h))
 
 # Crear el rectángulo del jugador y de la bala
-jugador = pygame.Rect(50, h - 100, 32, 48)
-bala = pygame.Rect(w - 50, h - 90, 16, 16)
-nave = pygame.Rect(w - 100, h - 100, 64, 64)
-menu_rect = pygame.Rect(w // 2 - 135, h // 2 - 90, 270, 180)  # Tamaño del menú
+jugador = pygame.Rect(50, h - 120, 32, 48)
+bala = pygame.Rect(w - 50, h - 110, 16, 16)
+nave = pygame.Rect(w - 100, h - 150, 64, 64)
+menu_rect = pygame.Rect(w // 2 - 155, h // 2 - 90, 270, 180)  # Tamaño del menú
 
 # Variables para la animación del jugador
 current_frame = 0
@@ -241,7 +241,7 @@ def disparar_bala():
 # Función para reiniciar la posición de la bala
 def reset_bala():
     global bala, bala_disparada
-    bala.x = w - 50  # Reiniciar la posición de la bala
+    bala.x = w - 70  # Reiniciar la posición de la bala
     bala_disparada = False
 
 # Función para manejar el salto
@@ -253,8 +253,8 @@ def manejar_salto():
         salto_altura -= gravedad  # Aplicar gravedad (reduce la velocidad del salto)
 
         # Si el jugador llega al suelo, detener el salto
-        if jugador.y >= h - 100:
-            jugador.y = h - 100
+        if jugador.y >= h - 120:
+            jugador.y = h - 120
             salto = False
             salto_altura = 18  # Restablecer la velocidad de salto
             en_suelo = True
