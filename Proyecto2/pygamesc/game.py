@@ -100,14 +100,12 @@ def guardar_datos():
 def crear_entrenar_modelo():
     try:
         df = pd.read_csv('datos_entrenamiento.csv')
+        if df.empty or len(df) < 5:
+            print("No hay suficientes datos para entrenar la red neuronal.")
+            return None
     except:
-        datos = {
-            'velocidad': [-5, -3, -7, -4],
-            'distancia': [200, 150, 300, 100],
-            'salto': [1, 0, 1, 0]
-        }
-        df = pd.DataFrame(datos)
-        df.to_csv('datos_entrenamiento.csv', index=False)
+        print("No se pudo cargar el archivo de datos.")
+        return None
 
     # Eliminar duplicados exactos
     df = df.drop_duplicates()
@@ -133,27 +131,15 @@ def crear_entrenar_modelo():
 
     joblib.dump(modelo, 'modelo_saltos.joblib')
     return modelo
-
-# Cargar modelo al inicio
-try:
-    modelo = joblib.load('modelo_saltos.joblib')
-except:
-    modelo = crear_entrenar_modelo()
     
 def crear_arbol_decision():
     try:
         df = pd.read_csv('datos_entrenamiento.csv')
-        if df.empty or len(df) < 4:
+        if df.empty or len(df) < 10:
             raise ValueError("Archivo vacío o con pocos datos.")
     except:
-        print("Creando datos de entrenamiento de ejemplo...")
-        datos = {
-            'velocidad': [-5, -3, -7, -4],
-            'distancia': [200, 150, 300, 100],
-            'salto': [1, 0, 1, 0]
-        }
-        df = pd.DataFrame(datos)
-        df.to_csv('datos_entrenamiento.csv', index=False)
+        print("Modelo No entrenado")
+        return None
 
     X = df[['velocidad', 'distancia']]
     y = df['salto']
@@ -161,33 +147,23 @@ def crear_arbol_decision():
     modelo = DecisionTreeClassifier()
     modelo.fit(X, y)
     
-    print(export_text(modelo, feature_names=["velocidad", "distancia"]))
+    # print(export_text(modelo, feature_names=["velocidad", "distancia"]))
 
     acc = modelo.score(X, y)  # árboles no generalizan tanto, precisión sobre el mismo dataset
     print(f"Árbol de decisión entrenado con precisión: {acc * 100:.2f}%")
 
     joblib.dump(modelo, 'modelo_arbol.joblib')
     return modelo
-
-# Cargar modelo de árbol de decisión al inicio
-try:
-    modelo_arbol = joblib.load('modelo_arbol.joblib')
-except:
-    modelo_arbol = crear_arbol_decision()  
+    
     
 def crear_modelo_knn():
     try:
         df = pd.read_csv('datos_entrenamiento.csv')
-        if df.empty or len(df) < 4:
+        if df.empty or len(df) < 10:
             raise ValueError("Datos insuficientes")
     except:
-        datos = {
-            'velocidad': [-5, -3, -7, -4],
-            'distancia': [200, 150, 300, 100],
-            'salto': [1, 0, 1, 0]
-        }
-        df = pd.DataFrame(datos)
-        df.to_csv('datos_entrenamiento.csv', index=False)
+        print("Modelo K-Vecinos no entrenado")
+        return None
 
     X = df[['velocidad', 'distancia']]
     y = df['salto']
@@ -204,16 +180,40 @@ def crear_modelo_knn():
     joblib.dump(modelo, 'modelo_knn.joblib')
     return modelo
 
+
+# Cargar modelos
+try:
+    modelo = joblib.load('modelo_saltos.joblib')
+except:
+    modelo = crear_entrenar_modelo()
+
+try:
+    modelo_arbol = joblib.load('modelo_arbol.joblib')
+except:
+    modelo_arbol = crear_arbol_decision()
+
 try:
     modelo_knn = joblib.load('modelo_knn.joblib')
 except:
     modelo_knn = crear_modelo_knn()
 
+# Verificar si el dataset tiene datos suficientes (una sola vez)
+try:
+    df_check = pd.read_csv('datos_entrenamiento.csv')
+    if df_check.empty or len(df_check) < 5:
+        datos_validos = False
+    else:
+        datos_validos = True
+except:
+    datos_validos = False
+
     
 def borrar_entrenamiento():
-    if os.path.exists("datos_entrenamiento.csv"):
-        os.remove("datos_entrenamiento.csv")
-        print("Archivo de datos eliminado.")
+    # Vaciar el dataset en lugar de eliminarlo
+    with open("datos_entrenamiento.csv", "w") as f:
+        f.write("velocidad,distancia,salto\n")  # Solo encabezado
+    print("Dataset vaciado.")
+
     if os.path.exists("modelo_saltos.joblib"):
         os.remove("modelo_saltos.joblib")
         print("Modelo entrenado eliminado.")
@@ -223,11 +223,13 @@ def borrar_entrenamiento():
     if os.path.exists("modelo_knn.joblib"):
         os.remove("modelo_knn.joblib")
         print("Modelo de K-Vecinos eliminado.")
+
     # Reiniciar el modelo a su estado inicial
     global modelo, modelo_arbol, modelo_knn
     modelo = crear_entrenar_modelo()
     modelo_arbol = crear_arbol_decision()
     modelo_knn = crear_modelo_knn()
+
 
 # Función para disparar la bala
 def disparar_bala():
@@ -258,28 +260,37 @@ def manejar_salto():
             en_suelo = True
 
 def actualizar_ia():
+    
+    if not datos_validos:
+        return False
+    
+    if modelo_tipo == "nn" and modelo is None:
+        return False
+    if modelo_tipo == "dt" and modelo_arbol is None:
+        return False
+    if modelo_tipo == "knn" and modelo_knn is None:
+        return False
+    
     distancia = abs(jugador.x - bala.x)
     entrada = pd.DataFrame([[velocidad_bala, distancia]], columns=["velocidad", "distancia"])
 
     if modelo_tipo == "nn":
         probabilidad_salto = modelo.predict_proba(entrada)[0][1]
         prediccion = 1 if probabilidad_salto > 0.80 else 0
-        print(f"[IA-NN] Velocidad: {velocidad_bala} | Distancia: {distancia} → Probabilidad salto: {probabilidad_salto:.2f}")
-        
+        print(f"Predicción Red Neuronal: {probabilidad_salto:.2f}")
     elif modelo_tipo == "dt":
         probabilidad_salto = modelo_arbol.predict_proba(entrada)[0][1]
         prediccion = 1 if probabilidad_salto > 0.80 else 0
-        print(f"[IA-DT] Velocidad: {velocidad_bala} | Distancia: {distancia} → Probabilidad salto: {probabilidad_salto:.2f}")
-        
+        print(f"Predicción Árbol de Decisión: {probabilidad_salto:.2f}")
     elif modelo_tipo == "knn":
         probabilidad_salto = modelo_knn.predict_proba(entrada)[0][1]
         prediccion = 1 if probabilidad_salto > 0.80 else 0
-        print(f"[IA-KNN] Velocidad: {velocidad_bala} | Distancia: {distancia} → Probabilidad salto: {probabilidad_salto:.2f}")
+        print(f"Predicción K-Vecinos: {probabilidad_salto:.2f}")
+    else:
+        return False
 
-        
-    if prediccion == 1 and en_suelo:
-        return True
-    return False
+    return prediccion == 1 and en_suelo
+
 
 
 # Función para actualizar el juego
@@ -370,19 +381,25 @@ def pausa_juego():
                 if evento.key == pygame.K_p:
                     pausa = False
                     esperando = False
-                elif evento.key == pygame.K_a:
-                    modo_auto = True
-                    print("Modo cambiado a Automático.")
                 elif evento.key == pygame.K_m:
                     modo_auto = False
                     print("Modo cambiado a Manual.")
                 elif evento.key == pygame.K_n:
+                    modo_auto = True
+                    pausa = False
+                    esperando = False
                     modelo_tipo = "nn"
                     print("Modelo cambiado a Red Neuronal.")
                 elif evento.key == pygame.K_d:
+                    modo_auto = True
+                    pausa = False
+                    esperando = False
                     modelo_tipo = "dt"
                     print("Modelo cambiado a Árbol de Decisión.")
                 elif evento.key == pygame.K_k:
+                    modo_auto = True
+                    pausa = False
+                    esperando = False
                     modelo_tipo = "knn"
                     print("Modelo cambiado a K-Vecinos.")
                 elif evento.key == pygame.K_t:
@@ -392,8 +409,6 @@ def pausa_juego():
                     print("Modelos reentrenados.")
                 elif evento.key == pygame.K_r:
                     borrar_entrenamiento()
-                    modelo = crear_entrenar_modelo()
-                    modelo_arbol = crear_arbol_decision()
                     print("Entrenamiento y modelos reiniciados.")
                 elif evento.key == pygame.K_q:
                     print("Juego terminado.")
@@ -456,8 +471,6 @@ def mostrar_menu():
                     print("Modelos reentrenados.")
                 elif evento.key == pygame.K_r:
                     borrar_entrenamiento()
-                    modelo = crear_entrenar_modelo()
-                    modelo_arbol = crear_arbol_decision()
                     print("Entrenamiento reiniciado.")
                 elif evento.key == pygame.K_q:
                     pygame.quit()
