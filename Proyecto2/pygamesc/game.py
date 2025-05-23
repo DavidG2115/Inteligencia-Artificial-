@@ -68,7 +68,7 @@ menu_img = pygame.image.load('assets/game/menu.png')
 fondo_img = pygame.transform.scale(fondo_img, (w, h))
 
 # Crear el rectángulo del jugador y de la bala
-jugador = pygame.Rect(50, h - 120, 32, 48)
+jugador = pygame.Rect(180, h - 120, 32, 48)
 bala = pygame.Rect(w - 50, h - 110, 16, 16)
 nave = pygame.Rect(w - 100, h - 150, 64, 64)
 menu_rect = pygame.Rect(w // 2 - 155, h // 2 - 90, 270, 180)  # Tamaño del menú
@@ -77,6 +77,7 @@ menu_rect = pygame.Rect(w // 2 - 155, h // 2 - 90, 270, 180)  # Tamaño del men�
 current_frame = 0
 frame_speed = 10  # Cuántos frames antes de cambiar a la siguiente imagen
 frame_count = 0
+velocidad_jugador = 5  # Puedes ajustar la velocidad si quieres
 
 # Variables para la bala
 velocidad_bala = -10  # Velocidad de la bala hacia la izquierda
@@ -494,9 +495,9 @@ def reiniciar_juego():
         datos_modelo.clear()
     
     menu_activo = True  # Activar de nuevo el menú
-    jugador.x, jugador.y = 50, h - 100  # Reiniciar posición del jugador
+    jugador.x, jugador.y = 180, h - 120  # Reiniciar posición del jugador
     bala.x = w - 50  # Reiniciar posición de la bala
-    nave.x, nave.y = w - 100, h - 100  # Reiniciar posición de la nave
+    nave.x, nave.y = w - 100, h - 120  # Reiniciar posición de la nave
     bala_disparada = False
     salto = False
     en_suelo = True
@@ -515,13 +516,21 @@ def main():
             if evento.type == pygame.QUIT:
                 correr = False
             if evento.type == pygame.KEYDOWN:
-                if evento.key == pygame.K_SPACE and en_suelo and not pausa:  # Detectar la tecla espacio para saltar
+                if evento.key == pygame.K_UP and en_suelo and not pausa:  # Detectar la tecla espacio para saltar
                     salto = True
                     en_suelo = False
                 if evento.key == pygame.K_p:  # Presiona 'p' para pausar el juego
                     pausa_juego()
+                if evento.key == pygame.K_LEFT:
+                    jugador.x -= velocidad_jugador
+                    if jugador.x < 0:
+                        jugador.x = 0
+                if evento.key == pygame.K_RIGHT:
+                    jugador.x += velocidad_jugador
+                    if jugador.x > 180:
+                        jugador.x = 180
                 if evento.key == pygame.K_q:  # Presiona 'q' para terminar el juego
-                    pygame.quit()
+                    pygame.quit()    
                     exit()
 
         if not pausa:
