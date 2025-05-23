@@ -32,8 +32,10 @@ NEGRO = (0, 0, 0)
 # Variables del jugador, bala, nave, fondo, etc.
 jugador = None
 bala = None
+bala2 = None
 fondo = None
 nave = None
+nave2 = None
 menu = None
 
 # Variables de salto
@@ -70,18 +72,25 @@ fondo_img = pygame.transform.scale(fondo_img, (w, h))
 # Crear el rectángulo del jugador y de la bala
 jugador = pygame.Rect(180, h - 120, 32, 48)
 bala = pygame.Rect(w - 50, h - 110, 16, 16)
+bala2 = pygame.Rect(180, h -650, 16, 16)
+
 nave = pygame.Rect(w - 100, h - 150, 64, 64)
+nave2 = pygame.Rect(130, h - 600, 64, 64)
 menu_rect = pygame.Rect(w // 2 - 155, h // 2 - 90, 270, 180)  # Tamaño del menú
 
 # Variables para la animación del jugador
 current_frame = 0
 frame_speed = 10  # Cuántos frames antes de cambiar a la siguiente imagen
 frame_count = 0
-velocidad_jugador = 5  # Puedes ajustar la velocidad si quieres
+velocidad_jugador = 40  # Puedes ajustar la velocidad si quieres
 
 # Variables para la bala
 velocidad_bala = -10  # Velocidad de la bala hacia la izquierda
 bala_disparada = False
+
+# Variables para la segunda bala
+bala2_disparada = False
+velocidad_bala2 = 2
 
 # Variables para el fondo en movimiento
 fondo_x1 = 0
@@ -233,17 +242,31 @@ def borrar_entrenamiento():
 
 
 # Función para disparar la bala
-def disparar_bala():
-    global bala_disparada, velocidad_bala
+def disparar_balas():
+    global bala_disparada, velocidad_bala, bala2_disparada, velocidad_bala2
+
     if not bala_disparada:
-        velocidad_bala = random.randint(-8, -3)  # Velocidad aleatoria negativa para la bala
+        velocidad_bala = random.randint(-8, -3)
         bala_disparada = True
 
+    if not bala2_disparada:
+        bala2.y = -20
+        velocidad_bala2 = 2
+        bala2_disparada = True
+
+
 # Función para reiniciar la posición de la bala
-def reset_bala():
+def reset_bala1():
     global bala, bala_disparada
-    bala.x = w - 70  # Reiniciar la posición de la bala
+
+    bala.x = w - 70
     bala_disparada = False
+    
+def reset_bala2():
+    global bala2, bala2_disparada
+    bala2.x = 180
+    bala2_disparada = False
+
 
 # Función para manejar el salto
 def manejar_salto():
@@ -257,7 +280,7 @@ def manejar_salto():
         if jugador.y >= h - 120:
             jugador.y = h - 120
             salto = False
-            salto_altura = 18  # Restablecer la velocidad de salto
+            salto_altura = 15  # Restablecer la velocidad de salto
             en_suelo = True
 
 def actualizar_ia():
@@ -296,7 +319,7 @@ def actualizar_ia():
 
 # Función para actualizar el juego
 def update():
-    global bala, velocidad_bala, current_frame, frame_count, fondo_x1, fondo_x2
+    global bala, velocidad_bala, bala2, velocidad_bala2, bala2_disparada, bala_disparada, current_frame, frame_count, fondo_x1, fondo_x2
 
     # Mover el fondo
     fondo_x1 -= 1
@@ -325,6 +348,7 @@ def update():
 
     # Dibujar la nave
     pantalla.blit(nave_img, (nave.x, nave.y))
+    pantalla.blit(nave_img, (nave2.x, nave2.y))
 
     # Mover y dibujar la bala
     if bala_disparada:
@@ -332,9 +356,25 @@ def update():
 
     # Si la bala sale de la pantalla, reiniciar su posición
     if bala.x < 0:
-        reset_bala()
+        reset_bala1()
 
     pantalla.blit(bala_img, (bala.x, bala.y))
+    
+    # Mover bala2
+    if bala2_disparada:
+        bala2.y += velocidad_bala2
+
+    # Reiniciar si sale de pantalla
+    if bala2.y > h:
+        reset_bala2()
+
+    pantalla.blit(bala_img, (bala2.x, bala2.y))
+
+
+    # Colisión con jugador
+    if jugador.colliderect(bala2):
+        print("Colisión con bala2 detectada!")
+        reiniciar_juego()
 
     # Colisión entre la bala y el jugador
     if jugador.colliderect(bala):
@@ -481,7 +521,7 @@ def mostrar_menu():
 
 # Función para reiniciar el juego tras la colisión
 def reiniciar_juego():
-    global menu_activo, jugador, bala, nave, bala_disparada, salto, en_suelo, modelo, modelo_arbol, modelo_knn, datos_modelo
+    global menu_activo, jugador, bala, nave, bala_disparada, bala2_disparada, salto, en_suelo, modelo, modelo_arbol, modelo_knn, datos_modelo
     
     # Si fue modo manual, guardar y entrenar con nuevos datos
     if not modo_auto and datos_modelo:
@@ -497,15 +537,19 @@ def reiniciar_juego():
     menu_activo = True  # Activar de nuevo el menú
     jugador.x, jugador.y = 180, h - 120  # Reiniciar posición del jugador
     bala.x = w - 50  # Reiniciar posición de la bala
+    bala2.x = 180  # Reiniciar posición de la bala2
+    bala2.y = h - 20  # Reiniciar posición de la bala2
     nave.x, nave.y = w - 100, h - 120  # Reiniciar posición de la nave
+    nave2.x, nave2.y = 180, h - 600  # Reiniciar posición de la nave2
     bala_disparada = False
+    bala2_disparada = False
     salto = False
     en_suelo = True
     mostrar_menu() 
     
 
 def main():
-    global salto, en_suelo, bala_disparada
+    global salto, en_suelo, bala_disparada, bala2_disparada
 
     reloj = pygame.time.Clock()
     mostrar_menu()  # Mostrar el menú al inicio
@@ -542,8 +586,8 @@ def main():
             if not modo_auto:
                 guardar_datos()
 
-            if not bala_disparada:
-                disparar_bala()
+            if not bala_disparada and not bala2_disparada:
+                disparar_balas()
             update()
 
             if modo_auto and actualizar_ia():
