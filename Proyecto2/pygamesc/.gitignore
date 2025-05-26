@@ -1,4 +1,6 @@
 datos_entrenamiento.csv
-modelo_saltos.joblib
+modelo_simple.keras
 modelo_arbol.joblib
 modelo_knn.joblib
+
+scaler_contextual.pkl
