@@ -2,6 +2,7 @@ import pygame
 import random
 import numpy as np
 from sklearn.neural_network import MLPClassifier
+from sklearn.multioutput import MultiOutputClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
@@ -27,10 +28,11 @@ import matplotlib.pyplot as plt
 pygame.init()
  
 # Definir el tipo de modelo a usar nn = "red neuronal"  dt = "arbol de decision" knn = "k-vecinos"
-modelo_tipo = "nn"
+modelo_tipo = "dt"
 modelo = None  # Modelo de red neuronal
 modelo_knn = None  # Modelo de k-vecinos
 modelo_arbol = None  # Modelo de árbol de decisión
+scaler_knn = None
 
 
 # Dimensiones de la pantalla
@@ -116,20 +118,27 @@ fondo_x2 = w
 
 ultimo_estado = None
 ultimo_guardado = 0
+esquiva_exitosa = False
 
-scaler = joblib.load("scaler_contextual.pkl")
+
+try:
+    scaler = joblib.load("scaler_contextual.pkl")
+except FileNotFoundError:
+    scaler = None
+    print("Scaler no encontrado. Entrénalo primero con algunos datos.")
+
 
 # Función para guardar datos de entrenamiento
 def guardar_datos():
-    global jugador, bala, bala2, velocidad_bala, velocidad_bala2, ultima_accion, en_suelo, ultimo_estado, ultimo_guardado
+    global jugador, bala, bala2, velocidad_bala, velocidad_bala2, ultima_accion, en_suelo
 
     if modo_auto:
         return  # Solo guardar en modo manual
 
     # === INPUTS ===
-    despBala = abs(jugador.x - bala.x)
+    despBala = jugador.x - bala.x
     velocidadBala = velocidad_bala
-    despBala2 = abs(jugador.y - bala2.y)
+    despBala2 = jugador.y - bala2.y
     velocidadBala2 = velocidad_bala2
 
     # === OUTPUTS ===
@@ -138,13 +147,6 @@ def guardar_datos():
     estatusDerecha = 1 if ultima_accion == 2 else 0
     estatusIzquierda = 1 if ultima_accion == 1 else 0
 
-    # # Evitar duplicados recientes
-    # estado_actual = (despBala, velocidadBala, despBala2, velocidadBala2, estatusAire, estatusSuelo, estatusDerecha, estatusIzquierda)
-    # if estado_actual == ultimo_estado and time.time() - ultimo_guardado < 0.5:
-    #     return
-
-    # ultimo_estado = estado_actual
-    # ultimo_guardado = time.time()
 
     archivo = "datos_entrenamiento.csv"
     encabezado = "despBala,velocidadBala,despBala2,velocidadBala2,estatusAire,estatusSuelo,estatusDerecha,estatusIzquierda\n"
@@ -157,61 +159,44 @@ def guardar_datos():
 
 
 
+
 # Función para crear/entrenar el modelo
 def crear_entrenar_modelo():
     try:
         df = pd.read_csv("datos_entrenamiento.csv")
-        if df.empty or len(df) < 20:
+        df.drop_duplicates(inplace=True)
+
+        if df.empty or len(df) < 5:
             print("No hay suficientes datos para entrenar.")
             return None
     except Exception as e:
         print(f"Error al leer el CSV: {e}")
         return None
 
-    # === Entradas y salidas ===
+    # Entradas y salidas
     X = df[['despBala', 'velocidadBala', 'despBala2', 'velocidadBala2']]
     y = df[['estatusAire', 'estatusSuelo', 'estatusDerecha', 'estatusIzquierda']]
 
-    # === Normalización ===
+    # Escalar los datos
     scaler = MinMaxScaler()
     X_scaled = scaler.fit_transform(X)
     joblib.dump(scaler, "scaler_contextual.pkl")
-
-    # === División de datos ===
+    
     X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
-    # === Modelo ===
-    model = Sequential([
-        Dense(64, activation='relu', input_shape=(X_train.shape[1],)),
-        Dropout(0.3),
-        Dense(64, activation='relu'),
-        Dropout(0.3),
-        Dense(y_train.shape[1], activation='sigmoid')
-    ])
+    # Entrenar modelo
+    model = MLPClassifier(hidden_layer_sizes=(64, 64, 64), activation='relu', solver='adam',
+                          max_iter=10000, random_state=42, shuffle=True)
 
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    model = MultiOutputClassifier(model, n_jobs=-1)
+    model.fit(X_train, y_train)
 
-    # === EarlyStopping ===
-    early_stop = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+    # Evaluar
+    score = model.score(X_test, y_test)
+    print(f"Precisión global del modelo: {score * 100:.2f}%")
 
-    # === Entrenamiento ===
-    model.fit(
-        X_train, y_train,
-        epochs=75,
-        batch_size=32,
-        validation_split=0.2,
-        verbose=1,
-        callbacks=[early_stop]
-    )
-
-    # === Evaluación ===
-    loss, acc = model.evaluate(X_test, y_test, verbose=0)
-    print(f"Precisión global del modelo: {acc * 100:.2f}%")
-
-    # === Guardar modelo ===
-    model.save("modelo_simple.keras")
-
-
+    # Guardar modelo
+    joblib.dump(model, "modelo_mlp.joblib")
     return model
 
 
@@ -219,7 +204,9 @@ def crear_entrenar_modelo():
 def crear_arbol_decision():
     try:
         df = pd.read_csv('datos_entrenamiento.csv')
-        if df.empty or len(df) < 20:
+        df.drop_duplicates(inplace=True)
+
+        if df.empty or len(df) < 5:
             print("No hay suficientes datos para entrenar árbol.")
             return None
     except:
@@ -242,34 +229,39 @@ def crear_arbol_decision():
     
     
 def crear_modelo_knn():
-    print("Entrenando modelo K-Vecinos...")
-    # try:
-    #     df = pd.read_csv('datos_entrenamiento.csv')
-    #     if df.empty or len(df) < 10:
-    #         raise ValueError("Datos insuficientes")
-    # except:
-    #     print("Modelo K-Vecinos no entrenado")
-    #     return None
+    try:
+        df = pd.read_csv('datos_entrenamiento.csv')
+        df.drop_duplicates(inplace=True)
 
-    # X = df[['velocidad', 'distancia']]
-    # y = df['salto']
+        if df.empty or len(df) < 10:
+            raise ValueError("Datos insuficientes")
+    except Exception as e:
+        print(f"Error al cargar datos para KNN: {e}")
+        return None
 
-    # n_max = len(X)
-    # n_vecinos = 7 if n_max >= 7 else n_max
+    X = df[['despBala', 'velocidadBala', 'despBala2', 'velocidadBala2']]
+    y = df[['estatusAire', 'estatusSuelo', 'estatusDerecha', 'estatusIzquierda']]
 
-    # modelo = KNeighborsClassifier(n_neighbors=n_vecinos, weights='distance')
-    # modelo.fit(X, y)
+    # Escalado con MinMaxScaler (importante para KNN)
+    scaler = joblib.load('scaler_contextual.pkl')
+    X_scaled = scaler.transform(X)
 
-    # acc = modelo.score(X, y)
-    # print(f"K-Vecinos entrenado con precisión: {acc * 100:.2f}%")
+    n_max = len(X)
+    n_vecinos = 5 if n_max >= 5 else n_max
 
-    # joblib.dump(modelo, 'modelo_knn.joblib')
-    # return modelo
+    modelo_knn = KNeighborsClassifier(n_neighbors=n_vecinos, weights='distance')
+    modelo_knn.fit(X_scaled, y)
+
+    acc = modelo_knn.score(X_scaled, y)
+    print(f"K-Vecinos entrenado con precisión: {acc * 100:.2f}%")
+
+    joblib.dump(modelo_knn, 'modelo_knn.joblib')
+    return modelo_knn
 
 
 # Cargar modelos
 try:
-    modelo = load_model('modelo_simple.keras')
+    modelo = joblib.load('modelo_mlp.joblib')
 except:
     modelo = crear_entrenar_modelo()
 
@@ -278,10 +270,15 @@ try:
 except:
     modelo_arbol = crear_arbol_decision()
 
-# try:
-#     modelo_knn = joblib.load('modelo_knn.joblib')
-# except:
-#     modelo_knn = crear_modelo_knn()
+try:
+    modelo_knn = joblib.load('modelo_knn.joblib')
+except:
+    modelo_knn = crear_modelo_knn()
+
+try:
+    scaler_knn = joblib.load('scaler_knn.pkl')
+except:
+    scaler_knn = None
 
 # Verificar si el dataset tiene datos suficientes (una sola vez)
 try:
@@ -299,8 +296,8 @@ def borrar_entrenamiento():
     with open("datos_entrenamiento.csv", "w") as f:
         f.write("despBala,velocidadBala,despBala2,velocidadBala2,estatusAire,estatusSuelo,estatusDerecha,estatusIzquierda\n")  # Solo encabezado
     print("Dataset vaciado.")
-    if os.path.exists("modelo_contextual.keras"):
-        os.remove("modelo_contextual.keras")
+    if os.path.exists("modelo_mlp.joblib"):
+        os.remove("modelo_mlp.joblib")
         print("Modelo entrenado eliminado.")
     if os.path.exists("modelo_arbol.joblib"):
         os.remove("modelo_arbol.joblib")
@@ -311,6 +308,9 @@ def borrar_entrenamiento():
     if os.path.exists("scaler_contextual.pkl"):
         os.remove("scaler_contextual.pkl")
         print("Scaler eliminado.")
+    if os.path.exists("scaler_knn.pkl"):
+        os.remove("scaler_knn.pkl")
+        print("Scaler KNN eliminado.")
 
     # Reiniciar el modelo a su estado inicial
     global modelo, modelo_arbol, modelo_knn
@@ -329,7 +329,7 @@ def disparar_balas():
 
     if not bala2_disparada:
         bala2.y = -20
-        velocidad_bala2 = 2
+        velocidad_bala2 = random.randint(1, 5) 
         bala2_disparada = True
 
 
@@ -364,61 +364,74 @@ def manejar_salto():
 def actualizar_ia():
     global jugador, bala, bala2, velocidad_bala, velocidad_bala2, salto, en_suelo
 
-    if not modelo or not datos_validos:
-        return False
+    if modelo is None or scaler is None or not datos_validos:
+        return False, False, False, False
 
-    # Solo usas una lista directamente
-    entrada = pd.DataFrame([[  # usando pandas
-        abs(jugador.x - bala.x),
+    # Crear entrada como DataFrame para mantener columnas correctas
+    entrada = pd.DataFrame([[
+        jugador.x - bala.x,
         velocidad_bala,
-        abs(jugador.y - bala2.y),
+        jugador.y - bala2.y,
         velocidad_bala2
     ]], columns=["despBala", "velocidadBala", "despBala2", "velocidadBala2"])
 
-
+    # Escalar entrada
     entrada_scaled = scaler.transform(entrada)
 
-    # Predicción
-    pred = modelo.predict(entrada_scaled, verbose=0)[0]
-    aire = pred[0] > 0.5
-    suelo_pred = pred[1] > 0.6
-    mover_der = pred[2] > 0.6
-    mover_izq = pred[3] > 0.6
+    # Realizar predicción con modelo MultiOutputClassifier
+    pred = modelo.predict_proba(entrada_scaled) # pred → [aire, suelo, der, izq]
 
-    print(f"Pred → Aire: {pred[0]:.2f}, Suelo: {pred[1]:.2f}, Der: {pred[2]:.2f}, Izq: {pred[3]:.2f}")
+    aire_prob = pred[0][0][1]    
+    suelo_prob = pred[1][0][1]   
+    der_prob = pred[2][0][1]     
+    izq_prob = pred[3][0][1]     
 
-    # Acciones
+    # Umbral de decisión
+    aire = aire_prob > 0.6
+    suelo_pred = suelo_prob > 0.6
+    mover_der =  der_prob > 0.6
+    mover_izq =  izq_prob > 0.6
+
+    print(f"Pred MLP → Aire: {aire_prob:.2f}, Suelo: {suelo_prob:.2f}, Der: {der_prob:.2f}, Izq: {izq_prob:.2f}")
+
+    # Ejecutar salto si está en el suelo
     if aire and en_suelo:
         salto = True
         en_suelo = False
         manejar_salto()
 
+    # Movimiento lateral
     if mover_izq:
         jugador.x = POS_ESQUIVA
     elif mover_der:
         jugador.x = POS_ORIGEN
 
     return aire, suelo_pred, mover_izq, mover_der
+
 
 def actualizar_ia_arbol():
     global jugador, bala, bala2, velocidad_bala, velocidad_bala2, salto, en_suelo
 
     if not modelo_arbol or not datos_validos:
-        return False
+        return False, False, False, False
 
-    entrada = pd.DataFrame([[
-        abs(jugador.x - bala.x),
+    entrada = pd.DataFrame([[ 
+        jugador.x - bala.x,
         velocidad_bala,
-        abs(jugador.y - bala2.y),
+        jugador.y - bala2.y,
         velocidad_bala2
-    ]],columns=["despBala", "velocidadBala", "despBala2", "velocidadBala2"])
+    ]], columns=["despBala", "velocidadBala", "despBala2", "velocidadBala2"])
 
-    pred = modelo_arbol.predict(entrada)[0]
+    # Obtener las probabilidades
+    probas = modelo_arbol.predict_proba(entrada)
 
-    aire = pred[0] == 1
-    suelo_pred = pred[1] == 1
-    mover_der = pred[2] == 1
-    mover_izq = pred[3] == 1
+    # Cada salida es un array: [proba_clase_0, proba_clase_1]
+    aire = probas[0][0][1] > 0.5
+    suelo_pred = probas[1][0][1] > 0.5
+    mover_der = probas[2][0][1] > 0.5
+    mover_izq = probas[3][0][1] > 0.5
+
+    print(f"Pred Arbol Prob → Aire: {probas[0][0][1]:.2f}, Suelo: {probas[1][0][1]:.2f}, Der: {probas[2][0][1]:.2f}, Izq: {probas[3][0][1]:.2f}")
 
     if aire and en_suelo:
         salto = True
@@ -431,6 +444,46 @@ def actualizar_ia_arbol():
         jugador.x = POS_ORIGEN
 
     return aire, suelo_pred, mover_izq, mover_der
+
+
+
+def actualizar_ia_knn():
+    global jugador, bala, bala2, velocidad_bala, velocidad_bala2, salto, en_suelo
+
+    if not modelo_knn or not datos_validos or not scaler_knn:
+        return False, False, False, False
+
+    entrada = pd.DataFrame([[  # usando pandas
+        jugador.x - bala.x,
+        velocidad_bala,
+        jugador.y - bala2.y,
+        velocidad_bala2
+    ]], columns=["despBala", "velocidadBala", "despBala2", "velocidadBala2"])
+
+    entrada_scaled = scaler_knn.transform(entrada)
+
+    probs = modelo_knn.predict_proba(entrada_scaled)
+
+    aire = probs[0][0][1] > 0.8
+    suelo_pred = probs[1][0][1] > 0.8
+    mover_der = probs[2][0][1] > 0.8
+    mover_izq = probs[3][0][1] > 0.8
+
+
+    print(f"Pred KNN → Aire: {probs[0][0][1]:.2f}, Suelo: {probs[1][0][1]:.2f}, Der: {probs[2][0][1]:.2f}, Izq: {probs[3][0][1]:.2f}")
+
+    if aire and en_suelo:
+        salto = True
+        en_suelo = False
+        manejar_salto()
+
+    if mover_izq:
+        jugador.x = POS_ESQUIVA
+    elif mover_der:
+        jugador.x = POS_ORIGEN
+
+    return aire, suelo_pred, mover_izq, mover_der
+
 
 
 
@@ -473,7 +526,7 @@ def update():
         bala.x += velocidad_bala
 
     # Si la bala sale de la pantalla, reiniciar su posición
-    if bala.x < 0:
+    if bala.x < 0 :
         reset_bala1()
 
     pantalla.blit(bala_img, (bala.x, bala.y))
@@ -483,8 +536,9 @@ def update():
         bala2.y += velocidad_bala2
 
     # Reiniciar si sale de pantalla
-    if bala2.y > h:
+    if bala2.y > h :
         reset_bala2()
+
 
     pantalla.blit(bala_img, (bala2.x, bala2.y))
 
@@ -706,16 +760,15 @@ def main():
 
             if modo_auto:
                 frame_ia += 1
-                if frame_ia % 3 == 0:
+                if frame_ia % 1 == 0:
                     # Actualizar IA cada 5 frames
                     if modelo_tipo == "nn":
-                        pred_salto, en_suelo, pred_izquierda, pred_der = actualizar_ia()
+                        pred_salto, pred_suelo, pred_izquierda, pred_der = actualizar_ia()
                     elif modelo_tipo == "dt":
-                        # Aquí podrías implementar la lógica para el árbol de decisión
                         pred_salto, pred_suelo, pred_izquierda, pred_der = actualizar_ia_arbol()
                         pass
                     elif modelo_tipo == "knn":
-                        # Aquí podrías implementar la lógica para K-Vecinos
+                        pred_salto, pred_suelo, pred_izquierda, pred_der = actualizar_ia_knn()
                         pass
                 
 
@@ -727,7 +780,7 @@ def main():
         # Mostrar FPS en título
         pygame.display.set_caption(f"FPS: {reloj.get_fps():.2f}")
         pygame.display.flip()
-        reloj.tick(30)  # límite de 30 FPS
+        reloj.tick(60)  # límite de 30 FPS
 
     pygame.quit()
 

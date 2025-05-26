@@ -1,5 +1,5 @@
 datos_entrenamiento.csv
-modelo_simple.keras
+modelo_mlp.joblib
 modelo_arbol.joblib
 modelo_knn.joblib
 
