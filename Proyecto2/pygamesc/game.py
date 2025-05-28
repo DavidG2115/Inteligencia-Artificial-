@@ -243,16 +243,17 @@ def crear_modelo_knn():
     y = df[['estatusAire', 'estatusSuelo', 'estatusDerecha', 'estatusIzquierda']]
 
     # Escalado con MinMaxScaler (importante para KNN)
-    scaler = joblib.load('scaler_contextual.pkl')
-    X_scaled = scaler.transform(X)
+    scaler_knn = MinMaxScaler()
+    X_knn = scaler_knn.fit_transform(X)
+    joblib.dump(scaler_knn, 'scaler_knn.pkl')
 
     n_max = len(X)
     n_vecinos = 5 if n_max >= 5 else n_max
 
     modelo_knn = KNeighborsClassifier(n_neighbors=n_vecinos, weights='distance')
-    modelo_knn.fit(X_scaled, y)
+    modelo_knn.fit(X_knn, y)
 
-    acc = modelo_knn.score(X_scaled, y)
+    acc = modelo_knn.score(X_knn, y)
     print(f"K-Vecinos entrenado con precisión: {acc * 100:.2f}%")
 
     joblib.dump(modelo_knn, 'modelo_knn.joblib')
@@ -271,14 +272,15 @@ except:
     modelo_arbol = crear_arbol_decision()
 
 try:
+    scaler_knn = joblib.load('scaler_knn.pkl')
+except:
+    scaler_knn = None
+
+try:
     modelo_knn = joblib.load('modelo_knn.joblib')
 except:
     modelo_knn = crear_modelo_knn()
 
-try:
-    scaler_knn = joblib.load('scaler_knn.pkl')
-except:
-    scaler_knn = None
 
 # Verificar si el dataset tiene datos suficientes (una sola vez)
 try:
@@ -329,7 +331,7 @@ def disparar_balas():
 
     if not bala2_disparada:
         bala2.y = -20
-        velocidad_bala2 = random.randint(1, 5) 
+        velocidad_bala2 = random.randint(3, 8) 
         bala2_disparada = True
 
 
@@ -766,10 +768,8 @@ def main():
                         pred_salto, pred_suelo, pred_izquierda, pred_der = actualizar_ia()
                     elif modelo_tipo == "dt":
                         pred_salto, pred_suelo, pred_izquierda, pred_der = actualizar_ia_arbol()
-                        pass
                     elif modelo_tipo == "knn":
                         pred_salto, pred_suelo, pred_izquierda, pred_der = actualizar_ia_knn()
-                        pass
                 
 
                 if pred_salto and en_suelo and not salto:
