@@ -389,10 +389,10 @@ def actualizar_ia():
     izq_prob = pred[3][0][1]     
 
     # Umbral de decisión
-    aire = aire_prob > 0.6
-    suelo_pred = suelo_prob > 0.6
-    mover_der =  der_prob > 0.6
-    mover_izq =  izq_prob > 0.6
+    aire = aire_prob > 0.5
+    suelo_pred = suelo_prob > 0.5
+    mover_der =  der_prob > 0.5
+    mover_izq =  izq_prob > 0.5
 
     print(f"Pred MLP → Aire: {aire_prob:.2f}, Suelo: {suelo_prob:.2f}, Der: {der_prob:.2f}, Izq: {izq_prob:.2f}")
 
