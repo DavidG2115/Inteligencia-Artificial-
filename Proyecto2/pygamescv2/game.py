@@ -1,15 +1,18 @@
 import pygame
 import random
 import csv
+import os
 
 import numpy as np
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.neural_network import MLPClassifier
+from sklearn.tree import DecisionTreeClassifier
 
 # Inicializar Pygame
 pygame.init()
 
 modelo_nn = None
+modelo_arbol = None
 scaler_nn = None
 
 # Dimensiones de la pantalla
@@ -97,11 +100,10 @@ def entrenar_red_neuronal():
             for fila in lector:
                 datos.append([float(fila[0]), float(fila[1]), float(fila[2]), int(fila[3])])
     except FileNotFoundError:
-        print("No se encontró el archivo de datos para entrenar.")
         return False
+    
 
     if not datos:
-        print("No hay datos para entrenar la red neuronal.")
         return False
 
     datos = np.array(datos, dtype=float)
@@ -122,6 +124,32 @@ def entrenar_red_neuronal():
     print("Entrenamiento completado.")
     return True
 
+
+def entrenar_arbol_decision():
+    global datos_modelo, modelo_arbol
+
+    datos = []
+    try:
+        with open("datos_entrenamiento.csv", mode="r", newline="") as archivo:
+            lector = csv.reader(archivo)
+            next(lector)  # Saltar encabezados
+            for fila in lector:
+                datos.append([float(fila[0]), float(fila[1]), float(fila[2]), int(fila[3])])
+    except FileNotFoundError:
+        return False
+
+    if not datos:
+        return False
+
+    datos = np.array(datos, dtype=float)
+    X = datos[:, :3]
+    y = datos[:, 3].astype(int)
+
+
+    modelo_arbol = DecisionTreeClassifier(max_depth=5)
+    modelo_arbol.fit(X, y)
+    print("Entrenamiento completado.")
+    return True
 
 def logica_auto(accion):
     global salto, en_suelo
@@ -144,7 +172,7 @@ def logica_auto(accion):
 def disparar_bala():
     global bala_disparada, velocidad_bala
     if not bala_disparada:
-        velocidad_bala = random.randint(-8, -3)
+        velocidad_bala = random.randint(-10, -6)
         bala_disparada = True
 
 def disparar_bala2():
@@ -276,12 +304,21 @@ def pausa_juego():
     else:
         print("Juego reanudado.")
 
+def reiniciar_dataset():
+    global datos_modelo, modelo_nn, scaler_nn
+    datos_modelo.clear()
+    modelo_nn = None
+    scaler_nn = None
+    if os.path.exists("datos_entrenamiento.csv"):
+        os.remove("datos_entrenamiento.csv")
+    print("¡Dataset y modelo reiniciados!")
+
 # Función para mostrar el menú y seleccionar el modo de juego
 def mostrar_menu():
-    global menu_activo, modo_auto, pausa
+    global menu_activo, modo_auto, pausa, modelo_nn, modelo_arbol
     pantalla.fill(NEGRO)
-    texto = fuente.render("Presiona 'A' para Auto, 'M' para Manual, o 'Q' para Salir", True, BLANCO)
-    pantalla.blit(texto, (w // 4, h // 2))
+    texto = fuente.render("N: Red Neuronal | A: Árbol | M: Manual | R: Reiniciar | Q: Salir", True, BLANCO)
+    pantalla.blit(texto, (w // 8, h // 2))
     pygame.display.flip()
 
     while menu_activo:
@@ -290,16 +327,36 @@ def mostrar_menu():
                 pygame.quit()
                 exit()
             if evento.type == pygame.KEYDOWN:
-                if evento.key == pygame.K_a:
+                if evento.key == pygame.K_n:
                     if entrenar_red_neuronal():
-                        modo_auto = True
+                        modo_auto = "nn"
                         pausa = False
                         menu_activo = False
                     else: 
-                        print("No hay datos para entrenar la RED")
+                        modo_auto = "nn"
+                        pausa = False
+                        menu_activo = False
+                elif evento.key == pygame.K_a:
+                    if entrenar_arbol_decision():
+                        modo_auto = "arbol"
+                        pausa = False
+                        menu_activo = False
+                    else:
+                        modo_auto = "arbol"
+                        pausa = False
+                        menu_activo = False
                 elif evento.key == pygame.K_m:
                     modo_auto = False
                     menu_activo = False
+                elif evento.key == pygame.K_r:
+                    reiniciar_dataset()
+                    pantalla.fill(NEGRO)
+                    texto = fuente.render("Dataset reiniciado. Elige modo.", True, BLANCO)
+                    pantalla.blit(texto, (w // 4, h // 2))
+                    pygame.display.flip()
+                    pygame.time.wait(1000)
+                    mostrar_menu()
+                    return
                 elif evento.key == pygame.K_q:
                     pygame.quit()
                     exit()
@@ -360,20 +417,29 @@ def main():
                 guardar_datos()
             else:
                 # lógica modo automático
-                if modelo_nn is not None and scaler_nn is not None:
-                    # Prepara los datos de entrada igual que en el entrenamiento
-                    v = velocidad_bala
-                    d1 = abs(jugador.x - bala.x)
-                    d2 = abs(jugador.y - bala2.y)
-                    x_input = np.array([[v, d1, d2]])
-                    x_input_norm = scaler_nn.transform(x_input)
-                    accion = modelo_nn.predict(x_input_norm)[0]
-                    proba = modelo_nn.predict_proba(x_input_norm)[0]
-                    logica_auto(accion)
-                    # (Opcional) Muestra las probabilidades en consola
-                    print(f"Acción predicha: {accion}, Probabilidades: {proba}")
+                if modo_auto == "nn":
+                    if modelo_nn is not None and scaler_nn is not None:
+                        v = velocidad_bala
+                        d1 = abs(jugador.x - bala.x)
+                        d2 = abs(jugador.y - bala2.y)
+                        x_input = np.array([[v, d1, d2]])
+                        x_input_norm = scaler_nn.transform(x_input)
+                        accion = modelo_nn.predict(x_input_norm)[0]
+                        proba = modelo_nn.predict_proba(x_input_norm)[0]
+                        logica_auto(accion)
+                        print(f"NN Acción predicha: {accion}, Probabilidades: {proba}")
+                elif modo_auto == "arbol":
+                    if modelo_arbol is not None:
+                        v = velocidad_bala
+                        d1 = abs(jugador.x - bala.x)
+                        d2 = abs(jugador.y - bala2.y)
+                        x_input = np.array([[v, d1, d2]])
+                        accion = modelo_arbol.predict(x_input)[0]
+                        logica_auto(accion)
+                        print(f"Árbol Acción predicha: {accion}")
                 else:
-                    print("La red neuronal no está entrenada.")
+                    # No hay modelo entrenado: el mono no hace nada
+                    pass
                 
 
             # Actualizar el juego
