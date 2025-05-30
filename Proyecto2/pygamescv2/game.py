@@ -7,6 +7,7 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
 
 # Inicializar Pygame
 pygame.init()
@@ -14,6 +15,7 @@ pygame.init()
 modelo_nn = None
 modelo_arbol = None
 scaler_nn = None
+modelo_knn = None
 
 # Dimensiones de la pantalla
 w, h = 800, 400
@@ -114,8 +116,8 @@ def entrenar_red_neuronal():
     X_norm = scaler_nn.fit_transform(X)
 
     modelo_nn = MLPClassifier(
-        hidden_layer_sizes=(32,),
-        max_iter=4000,
+        hidden_layer_sizes=(32,32),
+        max_iter=3000,
         random_state=42,
         activation='relu'
     )
@@ -148,6 +150,31 @@ def entrenar_arbol_decision():
 
     modelo_arbol = DecisionTreeClassifier(max_depth=5)
     modelo_arbol.fit(X, y)
+    print("Entrenamiento completado.")
+    return True
+
+def entrenar_knn():
+    global datos_modelo, modelo_knn
+
+    datos = []
+    try:
+        with open("datos_entrenamiento.csv", mode="r", newline="") as archivo:
+            lector = csv.reader(archivo)
+            next(lector)  # Saltar encabezados
+            for fila in lector:
+                datos.append([float(fila[0]), float(fila[1]), float(fila[2]), int(fila[3])])
+    except FileNotFoundError:
+        return False
+
+    if not datos:
+        return False
+
+    datos = np.array(datos, dtype=float)
+    X = datos[:, :3]
+    y = datos[:, 3].astype(int)
+
+    modelo_knn = KNeighborsClassifier(n_neighbors=5)
+    modelo_knn.fit(X, y)
     print("Entrenamiento completado.")
     return True
 
@@ -315,9 +342,9 @@ def reiniciar_dataset():
 
 # Función para mostrar el menú y seleccionar el modo de juego
 def mostrar_menu():
-    global menu_activo, modo_auto, pausa, modelo_nn, modelo_arbol
+    global menu_activo, modo_auto, pausa, modelo_nn, modelo_arbol, modelo_knn
     pantalla.fill(NEGRO)
-    texto = fuente.render("N: Red Neuronal | A: Árbol | M: Manual | R: Reiniciar | Q: Salir", True, BLANCO)
+    texto = fuente.render("N: Red Neuronal | A: Árbol | K: KNN | M: Manual | R: Reiniciar | Q: Salir", True, BLANCO)
     pantalla.blit(texto, (w // 8, h // 2))
     pygame.display.flip()
 
@@ -343,6 +370,15 @@ def mostrar_menu():
                         menu_activo = False
                     else:
                         modo_auto = "arbol"
+                        pausa = False
+                        menu_activo = False
+                elif evento.key == pygame.K_k:
+                    if entrenar_knn():
+                        modo_auto = "knn"
+                        pausa = False
+                        menu_activo = False
+                    else:
+                        modo_auto = "knn"
                         pausa = False
                         menu_activo = False
                 elif evento.key == pygame.K_m:
@@ -437,6 +473,16 @@ def main():
                         accion = modelo_arbol.predict(x_input)[0]
                         logica_auto(accion)
                         print(f"Árbol Acción predicha: {accion}")
+                elif modo_auto == "knn":
+                    if modelo_knn is not None:
+                        v = velocidad_bala
+                        d1 = abs(jugador.x - bala.x)
+                        d2 = abs(jugador.y - bala2.y)
+                        x_input = np.array([[v, d1, d2]])
+                        accion = modelo_knn.predict(x_input)[0]
+                        proba = modelo_knn.predict_proba(x_input)[0]
+                        logica_auto(accion)
+                        print(f"KNN Acción predicha: {accion}, Probabilidades: {proba}")
                 else:
                     # No hay modelo entrenado: el mono no hace nada
                     pass
