@@ -1,5 +1,6 @@
 import pygame
 import random
+import csv
 
 # Inicializar Pygame
 pygame.init()
@@ -69,10 +70,10 @@ frame_count = 0
 velocidad_bala = -10  # Velocidad de la bala hacia la izquierda
 bala_disparada = False
 
-velocidad_bala2 = 4  
+velocidad_bala2 = 5  
 bala2_disparada = False  
 
-velocidad_jugador = 20  # Velocidad del jugador
+velocidad_jugador = 5  # Velocidad del jugador
 
 # Variables para el fondo en movimiento
 fondo_x1 = 0
@@ -88,7 +89,6 @@ def disparar_bala():
 def disparar_bala2():
     global bala2_disparada, velocidad_bala2
     if not bala2_disparada:
-        velocidad_bala2 = random.randint(3, 8)
         bala2_disparada = True
 
 
@@ -179,12 +179,32 @@ def update():
 
 # Función para guardar datos del modelo en modo manual
 def guardar_datos():
-    global jugador, bala, velocidad_bala, salto
-    distancia = abs(jugador.x - bala.x)
-    dist2 = abs(jugador.x - bala2.x)
-    salto_hecho = 1 if salto else 0  # 1 si saltó, 0 si no saltó
-    # Guardar velocidad de la bala, distancia al jugador y si saltó o no
-    datos_modelo.append((velocidad_bala, distancia, salto_hecho))
+    global jugador, bala, bala2, velocidad_bala, salto
+    v = velocidad_bala
+    d1 = abs(jugador.x - bala.x)
+    d2 = abs(jugador.y - bala2.y)
+
+    accion = 0
+
+    if salto:
+        accion = 1
+    else:
+        if jugador.x < 50 - jugador.width//2:
+            accion = 2
+        if jugador.x > 50 + jugador.width//2:
+            accion = 3
+
+    fila = [v, d1, d2, accion]
+    datos_modelo.append(fila)
+
+    # Guardar en CSV cada vez que se llama la función
+    with open("datos_entrenamiento.csv", mode="a", newline="") as archivo:
+        escritor = csv.writer(archivo)
+        # Si el archivo está vacío, escribe los encabezados
+        if archivo.tell() == 0:
+            escritor.writerow(['velocidad_bala', 'distancia_bala', 'distancia_bala2', 'accion'])
+        escritor.writerow(fila)
+        
 
 # Función para pausar el juego y guardar los datos
 def pausa_juego():
@@ -197,7 +217,7 @@ def pausa_juego():
 
 # Función para mostrar el menú y seleccionar el modo de juego
 def mostrar_menu():
-    global menu_activo, modo_auto
+    global menu_activo, modo_auto, pausa
     pantalla.fill(NEGRO)
     texto = fuente.render("Presiona 'A' para Auto, 'M' para Manual, o 'Q' para Salir", True, BLANCO)
     pantalla.blit(texto, (w // 4, h // 2))
@@ -216,7 +236,6 @@ def mostrar_menu():
                     modo_auto = False
                     menu_activo = False
                 elif evento.key == pygame.K_q:
-                    print("Juego terminado. Datos recopilados:", datos_modelo)
                     pygame.quit()
                     exit()
 
@@ -233,11 +252,11 @@ def reiniciar_juego():
     salto = False
     en_suelo = True
     # Mostrar los datos recopilados hasta el momento
-    print("Datos recopilados para el modelo: ", datos_modelo)
+    # print("Datos recopilados para el modelo: ", datos_modelo)
     mostrar_menu()  # Mostrar el menú de nuevo para seleccionar modo
 
 def main():
-    global salto, en_suelo, bala_disparada
+    global salto, en_suelo, bala_disparada, modo_auto, pausa
 
     reloj = pygame.time.Clock()
     mostrar_menu()  # Mostrar el menú al inicio
@@ -248,27 +267,35 @@ def main():
             if evento.type == pygame.QUIT:
                 correr = False
             if evento.type == pygame.KEYDOWN:
-                if evento.key == pygame.K_SPACE and en_suelo and not pausa:  # Detectar la tecla espacio para saltar
+                if evento.key == pygame.K_UP and en_suelo and not pausa:  # Saltar
                     salto = True
                     en_suelo = False
-                if evento.key == pygame.K_LEFT and jugador.x > 0:  # Mover al jugador a la izquierda
-                    jugador.x -= velocidad_jugador
-                if evento.key == pygame.K_RIGHT and jugador.x < w - jugador.width:  # Mover al jugador a la derecha
-                    jugador.x += velocidad_jugador
-                if evento.key == pygame.K_p:  # Presiona 'p' para pausar el juego
+                if evento.key == pygame.K_p:
                     pausa_juego()
-                if evento.key == pygame.K_q:  # Presiona 'q' para terminar el juego
-                    print("Juego terminado. Datos recopilados:", datos_modelo)
+                    mostrar_menu()
+                if evento.key == pygame.K_q:  # Salir
                     pygame.quit()
                     exit()
 
         if not pausa:
-            # Modo manual: el jugador controla el salto
             if not modo_auto:
+                keys = pygame.key.get_pressed()
+                if keys[pygame.K_LEFT]:
+                    jugador.x = max(0, jugador.x - velocidad_jugador)
+                elif keys[pygame.K_RIGHT]:
+                    jugador.x = min(100, jugador.x + velocidad_jugador)  # <-- Límite derecho en 400
+                else:
+                    if jugador.x < 50:
+                        jugador.x = min(50, jugador.x + velocidad_jugador)
+                    elif jugador.x > 50:
+                        jugador.x = max(50, jugador.x - velocidad_jugador)
+
                 if salto:
                     manejar_salto()
-                # Guardar los datos si estamos en modo manual
                 guardar_datos()
+            else:
+                return
+                
 
             # Actualizar el juego
             if not bala_disparada:
@@ -277,7 +304,6 @@ def main():
                 disparar_bala2()
             update()
 
-        # Actualizar la pantalla
         pygame.display.flip()
         reloj.tick(30)  # Limitar el juego a 30 FPS
 
