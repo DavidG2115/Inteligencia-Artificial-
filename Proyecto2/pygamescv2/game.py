@@ -2,8 +2,15 @@ import pygame
 import random
 import csv
 
+import numpy as np
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.neural_network import MLPClassifier
+
 # Inicializar Pygame
 pygame.init()
+
+modelo_nn = None
+scaler_nn = None
 
 # Dimensiones de la pantalla
 w, h = 800, 400
@@ -78,6 +85,60 @@ velocidad_jugador = 5  # Velocidad del jugador
 # Variables para el fondo en movimiento
 fondo_x1 = 0
 fondo_x2 = w
+
+def entrenar_red_neuronal():
+    global datos_modelo, modelo_nn, scaler_nn
+
+    datos = []
+    try:
+        with open("datos_entrenamiento.csv", mode="r", newline="") as archivo:
+            lector = csv.reader(archivo)
+            next(lector)  # Saltar encabezados
+            for fila in lector:
+                datos.append([float(fila[0]), float(fila[1]), float(fila[2]), int(fila[3])])
+    except FileNotFoundError:
+        print("No se encontró el archivo de datos para entrenar.")
+        return False
+
+    if not datos:
+        print("No hay datos para entrenar la red neuronal.")
+        return False
+
+    datos = np.array(datos, dtype=float)
+    X = datos[:, :3]
+    y = datos[:, 3].astype(int)
+
+    scaler_nn = MinMaxScaler()
+    X_norm = scaler_nn.fit_transform(X)
+
+    modelo_nn = MLPClassifier(
+        hidden_layer_sizes=(32,),
+        max_iter=4000,
+        random_state=42,
+        activation='relu'
+    )
+    print("Entrenando red neuronal…")
+    modelo_nn.fit(X_norm, y)
+    print("Entrenamiento completado.")
+    return True
+
+
+def logica_auto(accion):
+    global salto, en_suelo
+    if accion == 1 and en_suelo:
+        salto = True
+        en_suelo = False
+    if accion == 2:
+        jugador.x = max(0, jugador.x - velocidad_jugador)
+    if accion == 3:
+        jugador.x = min(100, jugador.x + velocidad_jugador)
+    if accion == 0:
+        if jugador.x < 50:
+            jugador.x += velocidad_jugador
+        elif jugador.x > 50:
+            jugador.x -= velocidad_jugador
+    if salto:
+        manejar_salto()
 
 # Función para disparar la bala
 def disparar_bala():
@@ -230,8 +291,12 @@ def mostrar_menu():
                 exit()
             if evento.type == pygame.KEYDOWN:
                 if evento.key == pygame.K_a:
-                    modo_auto = True
-                    menu_activo = False
+                    if entrenar_red_neuronal():
+                        modo_auto = True
+                        pausa = False
+                        menu_activo = False
+                    else: 
+                        print("No hay datos para entrenar la RED")
                 elif evento.key == pygame.K_m:
                     modo_auto = False
                     menu_activo = False
@@ -294,7 +359,21 @@ def main():
                     manejar_salto()
                 guardar_datos()
             else:
-                return
+                # lógica modo automático
+                if modelo_nn is not None and scaler_nn is not None:
+                    # Prepara los datos de entrada igual que en el entrenamiento
+                    v = velocidad_bala
+                    d1 = abs(jugador.x - bala.x)
+                    d2 = abs(jugador.y - bala2.y)
+                    x_input = np.array([[v, d1, d2]])
+                    x_input_norm = scaler_nn.transform(x_input)
+                    accion = modelo_nn.predict(x_input_norm)[0]
+                    proba = modelo_nn.predict_proba(x_input_norm)[0]
+                    logica_auto(accion)
+                    # (Opcional) Muestra las probabilidades en consola
+                    print(f"Acción predicha: {accion}, Probabilidades: {proba}")
+                else:
+                    print("La red neuronal no está entrenada.")
                 
 
             # Actualizar el juego
